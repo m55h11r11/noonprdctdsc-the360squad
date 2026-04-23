@@ -17,11 +17,11 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://noonprdctdsc-the360squad.vercel.app'),
   title: 'مولد أوصاف منتجات نون — The360Squad',
   description:
-    'حوّل روابط AliExpress وصور المنتج إلى قوائم نون جاهزة بالعربية والإنجليزية. متوافق مع قواعد نون، يدعم عدة منتجات، وتصدير CSV.',
+    'حوّل روابط المنتجات من أي متجر (AliExpress، Amazon، Shopify، Salla…) وصورها إلى قوائم نون جاهزة بالعربية والإنجليزية. متوافق مع قواعد نون، يدعم عدة منتجات، وتصدير CSV.',
   robots: { index: true, follow: true },
   openGraph: {
     title: 'مولد أوصاف منتجات نون — The360Squad',
-    description: 'أنشئ أوصاف منتجات متوافقة مع نون بالعربية والإنجليزية من روابط AliExpress.',
+    description: 'أنشئ أوصاف منتجات متوافقة مع نون بالعربية والإنجليزية من أي مصدر.',
     type: 'website',
     url: 'https://noonprdctdsc-the360squad.vercel.app',
   },

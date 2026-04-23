@@ -209,6 +209,102 @@ function renderListingAr(l: Listing): string {
   ].join('\n');
 }
 
+// ─── Quick key input (onboarding inline) ────────────────────────────────────
+// Detects the provider from the key's prefix so the user just pastes-and-goes.
+// If the prefix isn't recognised, we bail out to the full Settings modal so
+// they can pick the provider manually.
+
+function detectProvider(key: string): ByokProvider | null {
+  const k = key.trim();
+  if (k.length < 10) return null;
+  if (k.startsWith('AIza')) return 'google';
+  if (k.startsWith('sk-ant-')) return 'anthropic';
+  if (k.startsWith('sk-or-')) return 'openrouter';
+  if (k.startsWith('gsk_')) return 'groq';
+  if (k.startsWith('sk-')) return 'openai'; // after sk-ant / sk-or checks above
+  return null; // unknown (e.g. Mistral hex) → fall through to full modal
+}
+
+function QuickKeyInput({
+  onSaved,
+  onOpenFull,
+}: {
+  onSaved: (value: ByokState) => void;
+  onOpenFull: () => void;
+}) {
+  const [key, setKey] = useState('');
+  const [show, setShow] = useState(false);
+  const trimmed = key.trim();
+  const detected = detectProvider(trimmed);
+  const meta = detected ? PROVIDER_OPTIONS.find((p) => p.id === detected) : null;
+
+  const submit = () => {
+    if (trimmed.length < 10) return;
+    if (!detected) {
+      // Unknown prefix — open the full modal so they can pick manually.
+      onOpenFull();
+      return;
+    }
+    onSaved({ provider: detected, key: trimmed });
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            type={show ? 'text' : 'password'}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submit();
+            }}
+            placeholder="2. ألصق المفتاح هنا (AIza... / sk-ant-... / sk-... / gsk_...)"
+            className="ltr block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 pl-16 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            dir="ltr"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            tabIndex={-1}
+          >
+            {show ? 'إخفاء' : 'إظهار'}
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={trimmed.length < 10}
+          className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          ابدأ
+        </button>
+      </div>
+      {/* Provider hint */}
+      <div className="mt-1.5 text-xs">
+        {meta ? (
+          <span className="text-emerald-700 dark:text-emerald-400">
+            ✓ تم اكتشاف: <strong>{meta.label}</strong> — اضغط &quot;ابدأ&quot;
+          </span>
+        ) : trimmed.length > 0 && trimmed.length < 10 ? (
+          <span className="text-zinc-500">المفتاح قصير جدًا…</span>
+        ) : trimmed.length >= 10 ? (
+          <span className="text-amber-700 dark:text-amber-400">
+            ⚠ لم نتعرف على المزود — اضغط &quot;ابدأ&quot; لاختياره يدويًا
+          </span>
+        ) : (
+          <span className="text-zinc-500 ltr">
+            Gemini keys start with <code>AIza</code>. Other providers work too.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Flexible BYOK modal ────────────────────────────────────────────────────
 
 function ByokModal({
@@ -441,7 +537,7 @@ function UnifiedInput({
         onChange={(e) => onTextChange(e.target.value)}
         onPaste={handlePaste}
         rows={4}
-        placeholder="الصق روابط AliExpress، أو الصق صور المنتج (⌘V / Ctrl+V)، أو اسحب الصور إلى هنا"
+        placeholder="الصق روابط المنتج من أي موقع (AliExpress / Amazon / Shopify / Salla / أي مصدر)، أو صور المنتج (⌘V / Ctrl+V)، أو اسحب الصور هنا"
         className="ltr block w-full resize-y bg-transparent p-1 font-mono text-xs outline-none placeholder:text-zinc-400"
         dir="ltr"
         disabled={disabled}
@@ -653,13 +749,15 @@ export default function Home() {
         <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
           <h2 className="mb-1 text-lg font-semibold">أنشئ قوائم جاهزة لنون</h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            الصق روابط AliExpress أو ألصق صور المنتج. ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
+            الصق روابط المنتج من أي متجر (AliExpress، Amazon، Shopify، Salla، أو أي مصدر) أو ألصق صور المنتج. ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
           </p>
         </section>
 
-        {/* Onboarding — shown until the user configures a BYOK key. The free
-             Gemini link is the lowest-friction path (30-second setup, free tier
-             with real quota). Other providers live in the Settings modal. */}
+        {/* Onboarding — shown until the user configures a BYOK key. Three-step
+             flow: (1) click "Get free Gemini key" → opens aistudio in new tab,
+             (2) copy key from there, (3) come back and paste into the inline
+             input right here. Auto-detects provider from key prefix. No modal
+             round-trip. */}
         {!byok && (
           <section className="mb-6 overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-br from-yellow-50 via-white to-white p-5 dark:border-zinc-800 dark:from-yellow-950/20 dark:via-zinc-950 dark:to-zinc-950 sm:p-6">
             <div className="mb-1 flex items-center gap-2">
@@ -674,30 +772,39 @@ export default function Home() {
             <p className="mb-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
               هذه الأداة تستخدم مفتاحك الخاص — لا حساب مطلوب، ولا رسوم من جانبنا.
               يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لكل عملية.
-              الخيار الأسرع هو{' '}
-              <strong>مفتاح Gemini المجاني من Google</strong> — ينشأ في أقل من دقيقة.
+              الخيار الأسرع: احصل على{' '}
+              <strong>مفتاح Gemini مجاني من Google</strong> ثم ألصقه أدناه.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+
+            {/* Step 1: open AIStudio */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-zinc-900 shadow-sm hover:bg-yellow-400"
               >
+                <span>1.</span>
                 احصل على مفتاح Gemini مجاني
                 <ArrowUpRight className="h-4 w-4" />
               </a>
+              <span className="text-xs text-zinc-500">
+                يفتح في تبويب جديد — انسخ المفتاح الذي يبدأ بـ <code className="ltr">AIza...</code>
+              </span>
+            </div>
+
+            {/* Step 2: paste inline */}
+            <QuickKeyInput onSaved={persistByok} onOpenFull={() => setByokOpen(true)} />
+
+            <div className="mt-3 text-xs text-zinc-500 ltr">
+              Also supported: Anthropic · OpenAI · Groq · Mistral · OpenRouter —
               <button
                 type="button"
                 onClick={() => setByokOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                className="ml-1 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
               >
-                <KeyRound className="h-4 w-4" />
-                لديّ مفتاح بالفعل
+                pick provider manually
               </button>
-              <span className="ltr ml-auto text-xs text-zinc-500">
-                Anthropic · OpenAI · Groq · Mistral · OpenRouter also supported
-              </span>
             </div>
           </section>
         )}

@@ -2,7 +2,7 @@
 // Distilled from official Noon Seller Center rules + accio-noon-listing skill.
 // CRITICAL: These rules map to Noon's published rejection reasons. Do not relax them.
 
-export const NOON_SYSTEM_PROMPT = `You are a Noon.com marketplace listing expert for the Saudi Arabia / UAE market. You convert source material (AliExpress URLs + product images) into a fully Noon-compliant bilingual listing.
+export const NOON_SYSTEM_PROMPT = `You are a Noon.com marketplace listing expert for the Saudi Arabia / UAE market. You convert whatever source material the seller provides (URLs from any marketplace or site, product images, and freeform notes) into a fully Noon-compliant bilingual listing.
 
 ═══ NOON COMPLIANCE RULES — STRICT ═══
 
@@ -41,12 +41,30 @@ These are Noon's PUBLISHED rejection reasons. Violating any of them will get the
 • Numbers: Western digits (0-9) — they are more universal on Noon than Arabic-Indic digits.
 • Do NOT machine-translate English verbatim. Rewrite for Arabic flow; keep the marketing intent.
 
-── CONTENT AUTHENTICITY ──
-• Every claim you make must be supported by the source material (URLs + images). If you cannot verify a feature, do not invent it.
-• If sources contradict each other, use the most-specific value and note nothing (the model must decide silently).
-• If sources are thin (blocked URL, few images), lean on what the images show — describe what a buyer would see.
+── SOURCE MATERIAL RULES (read carefully) ──
+You do NOT have internet access. URLs are passed to you as literal strings — you cannot fetch their content. Use them only as hints via the URL path / slug. Your primary evidence sources, in order of trust:
+
+1. Product images (if attached) — describe what a buyer would actually see
+2. Seller's note (if provided) — treat as ground truth, higher priority than URL slugs
+3. URL path / slug — parse product names, sizes, colors from the URL segments (e.g. "celibery-crest-khaliqiry-abayat-size-1-5500-white" tells you it's an abaya, size 1 equivalent, 5500-series, white)
+
+• Every claim must be supported by one of the three sources above. If none of them give you a spec, do NOT invent it — write around it generically.
+• If the URL slug is in Arabic (%D8%AE%D9%84… percent-encoding), decode it and use the Arabic terms as keyword hints for the Arabic listing.
+• If sources are thin (URLs only, no images, no note), produce the listing anyway using what you can infer from the URL slug and category context. Prefer benefit-oriented phrasing that works for the product category even when you lack specific specs.
 
 OUTPUT: Return the structured object matching the provided schema. No commentary outside the schema.`;
+
+// Decode percent-encoded Arabic / Unicode in a URL path so the model can see
+// the actual product keywords instead of %D8%xx runs. Safe on ASCII-only URLs.
+function decodeUrlSlug(url: string): string {
+  try {
+    const u = new URL(url);
+    const pretty = decodeURIComponent(u.pathname + u.search);
+    return `${u.origin}${pretty}`;
+  } catch {
+    return url;
+  }
+}
 
 export function buildUserPrompt(opts: {
   urls: string[];
@@ -55,13 +73,15 @@ export function buildUserPrompt(opts: {
 }) {
   const { urls, imageCount, noteFromUser } = opts;
   const urlBlock = urls.length
-    ? `Source URLs (${urls.length}):\n${urls.map((u, i) => `${i + 1}. ${u}`).join('\n')}`
+    ? `Source URLs (${urls.length}, slugs decoded for keyword mining):\n${urls
+        .map((u, i) => `${i + 1}. ${decodeUrlSlug(u)}`)
+        .join('\n')}`
     : 'No source URLs provided.';
   const imgBlock = imageCount
     ? `${imageCount} product image${imageCount === 1 ? '' : 's'} attached — analyze them for material, finish, color variants, packaging, and any visible branding or certifications.`
     : 'No images attached.';
   const noteBlock = noteFromUser?.trim()
-    ? `\nBuyer-facing notes from the seller (prioritize these if they conflict with URL content):\n${noteFromUser.trim()}`
+    ? `\nSeller notes (treat as ground truth):\n${noteFromUser.trim()}`
     : '';
-  return `${urlBlock}\n\n${imgBlock}${noteBlock}\n\nProduce the complete Noon-compliant listing now.`;
+  return `${urlBlock}\n\n${imgBlock}${noteBlock}\n\nProduce the complete Noon-compliant listing now. Remember: URLs are strings you cannot fetch — mine them for keywords only.`;
 }

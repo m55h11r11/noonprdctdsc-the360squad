@@ -1,0 +1,71 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - heading "مولد أوصاف منتجات نون" [level=1] [ref=e10]
+            - paragraph [ref=e11]: by The360Squad
+        - button "ابدأ الإعداد" [ref=e13]:
+          - img [ref=e14]
+          - text: ابدأ الإعداد
+    - main [ref=e17]:
+      - generic [ref=e18]:
+        - heading "أنشئ قوائم جاهزة لنون" [level=2] [ref=e19]
+        - paragraph [ref=e20]: الصق روابط المنتج من أي متجر (AliExpress، Amazon، Shopify، Salla، أو أي مصدر) أو ألصق صور المنتج. ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - img [ref=e23]
+          - generic [ref=e26]: ابدأ خلال 30 ثانية
+        - heading "أحضر مفتاح API خاصًا بك للبدء" [level=2] [ref=e27]
+        - paragraph [ref=e28]:
+          - text: "هذه الأداة تستخدم مفتاحك الخاص — لا حساب مطلوب، ولا رسوم من جانبنا. يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لكل عملية. الخيار الأسرع: احصل على"
+          - strong [ref=e29]: مفتاح Gemini مجاني من Google
+          - text: ثم ألصقه أدناه.
+        - generic [ref=e30]:
+          - link "1. احصل على مفتاح Gemini مجاني" [ref=e31] [cursor=pointer]:
+            - /url: https://aistudio.google.com/app/apikey
+            - generic [ref=e32]: "1."
+            - text: احصل على مفتاح Gemini مجاني
+            - img [ref=e33]
+          - generic [ref=e36]:
+            - text: يفتح في تبويب جديد — انسخ المفتاح الذي يبدأ بـ
+            - code [ref=e37]: AIza...
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - generic [ref=e40]:
+              - textbox "2. ألصق المفتاح هنا (AIza... / sk-ant-... / sk-... / gsk_...)" [ref=e41]
+              - button "إظهار" [ref=e42]
+            - button "ابدأ" [disabled] [ref=e43]
+          - generic [ref=e45]:
+            - text: Gemini keys start with
+            - code [ref=e46]: AIza
+            - text: . Other providers work too.
+        - generic [ref=e47]:
+          - text: "Also supported: Anthropic · OpenAI · Groq · Mistral · OpenRouter —"
+          - button "pick provider manually" [ref=e48]
+      - article [ref=e50]:
+        - textbox "اسم المنتج" [ref=e52]: منتج 1
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e55]: الروابط والصور
+            - generic [ref=e56]:
+              - textbox "الصق روابط المنتج من أي موقع (AliExpress / Amazon / Shopify / Salla / أي مصدر)، أو صور المنتج (⌘V / Ctrl+V)، أو اسحب الصور هنا" [ref=e57]
+              - button "اختر صورًا" [ref=e59]:
+                - img [ref=e60]
+                - text: اختر صورًا
+          - generic [ref=e63]:
+            - generic [ref=e64]: ملاحظة (اختياري)
+            - 'textbox "مثال: السوق المستهدف السعودية، نساء 25-40، سعر حوالي 89 ريال" [ref=e65]'
+        - button "أنشئ" [disabled] [ref=e67]
+      - generic [ref=e68]:
+        - button "أضف منتجًا آخر" [ref=e69]:
+          - img [ref=e70]
+          - text: أضف منتجًا آخر
+        - button "أنشئ الكل" [disabled] [ref=e71]
+        - button "تصدير إلى CSV" [disabled] [ref=e72]:
+          - img [ref=e73]
+          - text: تصدير إلى CSV
+      - generic [ref=e76]: "يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا. Bring-your-own-key · by The360Squad"
+  - alert [ref=e77]
