@@ -12,10 +12,13 @@ import {
 import {
   ArrowUpRight,
   Check,
+  Cloud,
+  CloudOff,
   Copy,
   Download,
   KeyRound,
   Loader2,
+  LogOut,
   Plus,
   Settings,
   Sparkles,
@@ -27,6 +30,9 @@ import {
 import { fileToResizedDataUrl } from '@/lib/image';
 import { downloadCsv, productsToCsv, type ProductRow } from '@/lib/csv';
 import type { Listing } from '@/lib/schema';
+import { getSupabase, supabaseConfigured } from '@/lib/supabase/client';
+import { RESTORE_RECENT_COUNT } from '@/lib/config';
+import type { User } from '@supabase/supabase-js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -576,12 +582,137 @@ function UnifiedInput({
   );
 }
 
+// ─── Sync modal (cloud save + cross-device via Google) ─────────────────────
+// Deliberately tiny. First-visit visitors never see this — the button that
+// opens it is hidden until the user has saved at least one listing. Once
+// they've invested in the tool (saved something), the cloud option becomes
+// available as an opt-in for cross-device sync. No banners, no interrupts.
+
+function SyncModal({
+  user,
+  onClose,
+  onSignIn,
+  onSignOut,
+  onDeleteAll,
+}: {
+  user: User | null;
+  onClose: () => void;
+  onSignIn: () => void;
+  onSignOut: () => void;
+  onDeleteAll: () => void;
+}) {
+  const isSignedIn = !!user && !user.is_anonymous;
+  const email = user?.email ?? '';
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold">المزامنة عبر الأجهزة</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            aria-label="إغلاق"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {isSignedIn ? (
+          <>
+            <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+              مسجّل الدخول بحساب Google:{' '}
+              <strong className="ltr inline-block font-mono text-xs">{email}</strong>
+              <br />
+              قوائمك تُحفظ تلقائيًا وستتبعك على أي جهاز تدخل فيه بنفس الحساب.
+            </p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                <LogOut className="h-4 w-4" />
+                تسجيل الخروج من هذا الجهاز
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteAll}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-4 w-4" />
+                حذف جميع بياناتي
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+              قوائمك محفوظة على هذا الجهاز فقط. سجّل الدخول بحساب Google لتحصل عليها على جميع أجهزتك تلقائيًا.
+            </p>
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-white border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 shadow-sm dark:border-zinc-700 dark:bg-zinc-100"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.83c.87-2.6 3.3-4.52 6.16-4.52z"
+                  fill="#EA4335"
+                />
+              </svg>
+              تسجيل الدخول بحساب Google
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteAll}
+              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              حذف بياناتي من السحابة
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [products, setProducts] = useState<ProductState[]>(() => [newProduct(1)]);
   const [byok, setByok] = useState<ByokState | null>(null);
   const [byokOpen, setByokOpen] = useState(false);
+
+  // Cloud sync state. These only matter when Supabase is configured on the
+  // deployment. If it's not, cloudReady stays false and the ☁️ button never
+  // appears — the app behaves exactly like it did before cloud sync shipped.
+  const [cloudUser, setCloudUser] = useState<User | null>(null);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [hasCloudSaves, setHasCloudSaves] = useState(false);
 
   // Load BYOK from localStorage on mount.
   useEffect(() => {
@@ -591,6 +722,83 @@ export default function Home() {
     } catch {
       /* corrupt — ignore */
     }
+  }, []);
+
+  // Cloud session bootstrap.
+  //   1. If Supabase is wired up, get the current session (Google user, anon
+  //      user, or none).
+  //   2. If there is no session, sign in anonymously — this is silent, takes
+  //      ~200ms, and gives us a user_id to scope saves by.
+  //   3. Once a session exists, fetch the user's recent listings. If any are
+  //      found, replace the default blank product with those cards (result
+  //      already populated) plus a trailing blank card so the user can still
+  //      start fresh.
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      let user = sessionData.session?.user ?? null;
+
+      if (!user) {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error) {
+          console.warn('[cloud] anonymous sign-in failed — cloud features off for this session:', error.message);
+          return;
+        }
+        user = data.user ?? null;
+      }
+      if (cancelled) return;
+      setCloudUser(user);
+      setCloudReady(true);
+
+      // Pull recent listings to decide whether to show the ☁️ button and
+      // whether to restore past work into the UI.
+      try {
+        const res = await fetch('/api/listings');
+        if (!res.ok) return;
+        const payload = await res.json();
+        const items: Array<{
+          id: number;
+          name: string;
+          source_urls: string[];
+          note: string | null;
+          result: Listing;
+        }> = payload.items ?? [];
+        if (items.length > 0 && !cancelled) {
+          setHasCloudSaves(true);
+          const restored: ProductState[] = items.slice(0, RESTORE_RECENT_COUNT).map((it) => ({
+            id: uid(),
+            name: it.name,
+            text: (it.source_urls ?? []).join('\n'),
+            note: it.note ?? '',
+            images: [], // images aren't persisted server-side; see README design note
+            result: it.result,
+            loading: false,
+            error: null,
+          }));
+          // Restored cards first, then a blank one so the user can keep going.
+          setProducts([...restored, newProduct(restored.length + 1)]);
+        }
+      } catch {
+        /* non-fatal — user keeps working locally */
+      }
+    })();
+
+    // Subscribe to auth state changes so the UI updates after Google sign-in.
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (_event: string, session: { user: User } | null) => {
+        setCloudUser(session?.user ?? null);
+      },
+    );
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const persistByok = useCallback((next: ByokState | null) => {
@@ -671,6 +879,33 @@ export default function Home() {
         return;
       }
       updateProduct(id, { loading: false, error: null, result: data.listing });
+
+      // Fire-and-forget save to Supabase. We deliberately don't await or
+      // surface errors to the user — the listing is already in their UI,
+      // saving is a bonus. If it fails we lose a row but the user's session
+      // isn't affected. Keeps the "not first on sight" promise: no toast,
+      // no loading spinner, no error popup for the save path.
+      if (cloudReady && supabaseConfigured) {
+        const meta = data?.meta ?? {};
+        fetch('/api/listings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: p.name,
+            sourceUrls: urls,
+            note: p.note || null,
+            provider: meta.provider ?? null,
+            modelId: meta.modelId ?? null,
+            imageCount: p.images.length,
+            generationMs: typeof meta.generationMs === 'number' ? meta.generationMs : null,
+            listing: data.listing,
+          }),
+        })
+          .then(() => setHasCloudSaves(true))
+          .catch(() => {
+            /* non-fatal */
+          });
+      }
     } catch (err) {
       updateProduct(id, {
         loading: false,
@@ -678,6 +913,49 @@ export default function Home() {
       });
     }
   };
+
+  // Cloud sync handlers — passed to SyncModal.
+  const handleGoogleSignIn = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    // After sign-out, bootstrap a fresh anonymous session so the app stays usable.
+    const { data } = await supabase.auth.signInAnonymously();
+    setCloudUser(data.user ?? null);
+    setSyncOpen(false);
+  }, []);
+
+  const handleDeleteAll = useCallback(async () => {
+    const ok = window.confirm(
+      'هل أنت متأكد؟ سيتم حذف جميع قوائمك المحفوظة. لا يمكن التراجع عن هذا الإجراء.',
+    );
+    if (!ok) return;
+    try {
+      await fetch('/api/listings', { method: 'DELETE' });
+    } catch {
+      /* non-fatal — user can retry */
+    }
+    // Reset local state to a clean slate.
+    setProducts([newProduct(1)]);
+    setHasCloudSaves(false);
+    setSyncOpen(false);
+    // Re-sign-in anonymously so the session continues to work.
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data } = await supabase.auth.signInAnonymously();
+      setCloudUser(data.user ?? null);
+    }
+  }, []);
 
   const generateAll = async () => {
     for (const p of products) {
@@ -727,6 +1005,25 @@ export default function Home() {
               <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 sm:inline">
                 {byokLabel}
               </span>
+            )}
+            {/* Cloud sync icon — deliberately hidden on first visit. Appears
+                only after the user has saved at least one listing (so the
+                feature is discoverable, not pushy), or once they're signed
+                in via Google. */}
+            {cloudReady && (hasCloudSaves || (cloudUser && !cloudUser.is_anonymous)) && (
+              <button
+                type="button"
+                onClick={() => setSyncOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                title="مزامنة عبر الأجهزة"
+                aria-label="مزامنة"
+              >
+                {cloudUser && !cloudUser.is_anonymous ? (
+                  <Cloud className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <CloudOff className="h-3.5 w-3.5" />
+                )}
+              </button>
             )}
             <button
               type="button"
@@ -951,6 +1248,16 @@ export default function Home() {
 
       {byokOpen && (
         <ByokModal initial={byok} onSave={persistByok} onClose={() => setByokOpen(false)} />
+      )}
+
+      {syncOpen && (
+        <SyncModal
+          user={cloudUser}
+          onClose={() => setSyncOpen(false)}
+          onSignIn={handleGoogleSignIn}
+          onSignOut={handleSignOut}
+          onDeleteAll={handleDeleteAll}
+        />
       )}
     </div>
   );

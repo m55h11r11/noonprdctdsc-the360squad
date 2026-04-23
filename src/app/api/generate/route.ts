@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
     model: byokModel,
   });
 
+  const startedAt = Date.now();
   try {
     const result = await generateObject({
       model,
@@ -100,7 +101,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       listing: result.object,
-      meta: { model: label },
+      meta: {
+        model: label,
+        // Split out so the client can persist these alongside the listing
+        // without having to parse the combined label string.
+        provider: byokProvider,
+        modelId: byokModel || undefined,
+        generationMs: Date.now() - startedAt,
+      },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown generation error.';
