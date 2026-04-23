@@ -2,6 +2,7 @@
 
 import {
   ChangeEvent,
+  ClipboardEvent as ReactClipboardEvent,
   DragEvent,
   useCallback,
   useEffect,
@@ -28,13 +29,24 @@ import type { Listing } from '@/lib/schema';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type ByokProvider = 'anthropic' | 'google';
-type ByokState = { provider: ByokProvider; key: string } | null;
+type ByokProvider =
+  | 'anthropic'
+  | 'google'
+  | 'openai'
+  | 'groq'
+  | 'mistral'
+  | 'openrouter';
+
+interface ByokState {
+  provider: ByokProvider;
+  key: string;
+  model?: string; // optional — overrides the per-provider default
+}
 
 interface ProductState {
   id: string;
   name: string;
-  urls: string;
+  text: string; // textarea content — URLs pasted in free-form
   note: string;
   images: string[]; // resized JPEG data URLs
   result: Listing | null;
@@ -42,9 +54,62 @@ interface ProductState {
   error: string | null;
 }
 
+// Keep this list in sync with src/lib/providers.ts PROVIDER_META.
+// Duplicated here so the client doesn't need to import server-only deps.
+const PROVIDER_OPTIONS: Array<{
+  id: ByokProvider;
+  label: string;
+  defaultModel: string;
+  keysUrl: string;
+  hint: string;
+}> = [
+  {
+    id: 'anthropic',
+    label: 'Anthropic (Claude)',
+    defaultModel: 'claude-haiku-4-5',
+    keysUrl: 'https://console.anthropic.com/settings/keys',
+    hint: 'sk-ant-...',
+  },
+  {
+    id: 'google',
+    label: 'Google (Gemini)',
+    defaultModel: 'gemini-2.5-flash',
+    keysUrl: 'https://aistudio.google.com/app/apikey',
+    hint: 'AIza...',
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI (GPT)',
+    defaultModel: 'gpt-4o-mini',
+    keysUrl: 'https://platform.openai.com/api-keys',
+    hint: 'sk-...',
+  },
+  {
+    id: 'groq',
+    label: 'Groq (Llama / Mixtral)',
+    defaultModel: 'llama-3.3-70b-versatile',
+    keysUrl: 'https://console.groq.com/keys',
+    hint: 'gsk_...',
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral',
+    defaultModel: 'mistral-small-latest',
+    keysUrl: 'https://console.mistral.ai/api-keys',
+    hint: '...',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter (any model)',
+    defaultModel: 'anthropic/claude-haiku-4-5',
+    keysUrl: 'https://openrouter.ai/keys',
+    hint: 'sk-or-...',
+  },
+];
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const BYOK_STORAGE_KEY = 'noon-desc.byok.v1';
+const BYOK_STORAGE_KEY = 'noon-desc.byok.v2'; // v2: added optional `model`
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -68,8 +133,8 @@ function parseUrls(raw: string): string[] {
 function newProduct(idx: number): ProductState {
   return {
     id: uid(),
-    name: `Product ${idx}`,
-    urls: '',
+    name: `منتج ${idx}`,
+    text: '',
     note: '',
     images: [],
     result: null,
@@ -91,14 +156,14 @@ function CopyButton({ getText }: { getText: () => string }) {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         } catch {
-          // Clipboard API blocked in some iframes / HTTP. Fall back silently.
+          /* clipboard blocked — silent */
         }
       }}
       className="inline-flex items-center gap-1.5 rounded-md bg-zinc-200 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-      aria-label="Copy to clipboard"
+      aria-label="نسخ"
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? 'تم النسخ' : 'نسخ'}
     </button>
   );
 }
@@ -106,11 +171,11 @@ function CopyButton({ getText }: { getText: () => string }) {
 function CodeBlock({
   label,
   text,
-  rtl,
+  direction,
 }: {
   label: string;
   text: string;
-  rtl?: boolean;
+  direction: 'rtl' | 'ltr';
 }) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -119,9 +184,7 @@ function CodeBlock({
         <CopyButton getText={() => text} />
       </div>
       <pre
-        className={`whitespace-pre-wrap break-words p-3 text-sm leading-6 text-zinc-800 dark:text-zinc-200 ${
-          rtl ? 'rtl' : ''
-        }`}
+        className={`whitespace-pre-wrap break-words p-3 text-sm leading-6 text-zinc-800 dark:text-zinc-200 ${direction}`}
       >
         {text}
       </pre>
@@ -145,18 +208,24 @@ function renderListingAr(l: Listing): string {
   ].join('\n');
 }
 
+// ─── Flexible BYOK modal ────────────────────────────────────────────────────
+
 function ByokModal({
   initial,
   onSave,
   onClose,
 }: {
-  initial: ByokState;
-  onSave: (value: ByokState) => void;
+  initial: ByokState | null;
+  onSave: (value: ByokState | null) => void;
   onClose: () => void;
 }) {
   const [provider, setProvider] = useState<ByokProvider>(initial?.provider ?? 'anthropic');
   const [key, setKey] = useState(initial?.key ?? '');
+  const [model, setModel] = useState(initial?.model ?? '');
   const [show, setShow] = useState(false);
+
+  const meta = PROVIDER_OPTIONS.find((p) => p.id === provider)!;
+  const effectiveModel = (model.trim() || meta.defaultModel);
 
   return (
     <div
@@ -170,84 +239,82 @@ function ByokModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Bring your own API key</h2>
+          <h2 className="text-lg font-semibold">استخدم مفتاح API خاص بك</h2>
           <button
             type="button"
             onClick={onClose}
             className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            aria-label="Close"
+            aria-label="إغلاق"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-          Paste an Anthropic or Google API key to get unlimited generations on your own quota.
-          The key is saved in your browser only — it is sent to our server only as a pass-through
-          for this request, never stored.
+          الصق مفتاح API من أي مزود لتحصل على إنشاءات غير محدودة بحسابك. يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لهذه العملية، دون تخزين على خادمنا.
         </p>
 
         <label className="mb-3 block text-sm font-medium">
-          Provider
+          المزود
           <select
             value={provider}
-            onChange={(e) => setProvider(e.target.value as ByokProvider)}
+            onChange={(e) => {
+              setProvider(e.target.value as ByokProvider);
+              setModel(''); // reset custom model when provider changes
+            }}
             className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           >
-            <option value="anthropic">Anthropic (Claude Haiku 4.5)</option>
-            <option value="google">Google (Gemini 2.5 Flash)</option>
+            {PROVIDER_OPTIONS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </label>
 
+        <label className="mb-3 block text-sm font-medium">
+          معرّف النموذج <span className="text-xs font-normal text-zinc-500">(اختياري)</span>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={meta.defaultModel}
+            className="ltr mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <span className="mt-1 block text-xs text-zinc-500">
+            اتركه فارغًا لاستخدام: <code className="ltr inline">{meta.defaultModel}</code>
+          </span>
+        </label>
+
         <label className="mb-2 block text-sm font-medium">
-          API key
+          مفتاح API
           <div className="relative mt-1">
             <input
               type={show ? 'text' : 'password'}
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder={provider === 'anthropic' ? 'sk-ant-...' : 'AIza...'}
-              className="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 pr-16 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              placeholder={meta.hint}
+              className="ltr block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 pr-16 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900"
               autoComplete="off"
               spellCheck={false}
             />
             <button
               type="button"
               onClick={() => setShow((s) => !s)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
-              {show ? 'Hide' : 'Show'}
+              {show ? 'إخفاء' : 'إظهار'}
             </button>
           </div>
         </label>
         <p className="mb-5 text-xs text-zinc-500">
-          {provider === 'anthropic' ? (
-            <>
-              Get a key at{' '}
-              <a
-                href="https://console.anthropic.com/settings/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                console.anthropic.com
-              </a>
-              .
-            </>
-          ) : (
-            <>
-              Get a key at{' '}
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                aistudio.google.com
-              </a>{' '}
-              — free tier available.
-            </>
-          )}
+          احصل على مفتاح من{' '}
+          <a href={meta.keysUrl} target="_blank" rel="noreferrer" className="underline">
+            {new URL(meta.keysUrl).hostname}
+          </a>
+          {provider === 'google' || provider === 'groq' ? ' — يتوفر وصول مجاني.' : '.'}
         </p>
 
         <div className="flex justify-between gap-2">
@@ -259,7 +326,7 @@ function ByokModal({
             }}
             className="rounded-md px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
           >
-            Clear key
+            مسح المفتاح
           </button>
           <div className="flex gap-2">
             <button
@@ -267,18 +334,22 @@ function ByokModal({
               onClick={onClose}
               className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
             >
-              Cancel
+              إلغاء
             </button>
             <button
               type="button"
               disabled={!key.trim()}
               onClick={() => {
-                onSave({ provider, key: key.trim() });
+                onSave({
+                  provider,
+                  key: key.trim(),
+                  ...(model.trim() ? { model: effectiveModel } : {}),
+                });
                 onClose();
               }}
               className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              Save
+              حفظ
             </button>
           </div>
         </div>
@@ -287,79 +358,75 @@ function ByokModal({
   );
 }
 
-function ImageDropZone({
+// ─── Unified input: textarea + images in one box + paste support ────────────
+
+function UnifiedInput({
+  text,
+  onTextChange,
   images,
-  onAdd,
-  onRemove,
+  onAddImages,
+  onRemoveImage,
   disabled,
 }: {
+  text: string;
+  onTextChange: (v: string) => void;
   images: string[];
-  onAdd: (files: File[]) => void;
-  onRemove: (idx: number) => void;
+  onAddImages: (files: File[]) => void;
+  onRemoveImage: (idx: number) => void;
   disabled?: boolean;
 }) {
-  const [drag, setDrag] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [drag, setDrag] = useState(false);
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    onAdd(Array.from(files).filter((f) => f.type.startsWith('image/')));
+  const handlePaste = (e: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData?.files || []).filter((f) =>
+      f.type.startsWith('image/'),
+    );
+    if (files.length > 0) {
+      e.preventDefault();
+      onAddImages(files);
+    }
+    // else: let the default textarea paste behaviour proceed (URLs as text)
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDrag(false);
+    if (disabled) return;
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) =>
+      f.type.startsWith('image/'),
+    );
+    if (files.length > 0) onAddImages(files);
   };
 
   return (
-    <div>
-      <div
-        onDragOver={(e: DragEvent) => {
-          e.preventDefault();
-          setDrag(true);
-        }}
-        onDragLeave={() => setDrag(false)}
-        onDrop={(e: DragEvent) => {
-          e.preventDefault();
-          setDrag(false);
-          if (disabled) return;
-          handleFiles(e.dataTransfer.files);
-        }}
-        onClick={() => !disabled && inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-sm transition ${
-          drag
-            ? 'border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-900'
-            : 'border-zinc-300 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:border-zinc-600'
-        } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
-      >
-        <Upload className="mb-1 h-5 w-5 text-zinc-400" />
-        <span className="text-zinc-600 dark:text-zinc-400">
-          Drop product images here, or click to browse
-        </span>
-        <span className="mt-0.5 text-xs text-zinc-400">
-          JPEG or PNG — resized automatically to 1280px
-        </span>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept="image/*"
-          className="hidden"
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            handleFiles(e.target.files);
-            e.target.value = ''; // allow re-selecting the same file
-          }}
-        />
-      </div>
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!disabled) setDrag(true);
+      }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={handleDrop}
+      className={`rounded-lg border-2 border-dashed p-3 transition ${
+        drag
+          ? 'border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-900'
+          : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950'
+      } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
+    >
       {images.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mb-2 flex flex-wrap gap-2">
           {images.map((img, i) => (
             <div
               key={i}
-              className="group relative h-20 w-20 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800"
+              className="group relative h-16 w-16 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img} alt={`upload ${i + 1}`} className="h-full w-full object-cover" />
               <button
                 type="button"
-                onClick={() => onRemove(i)}
-                className="absolute right-0.5 top-0.5 rounded bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
-                aria-label={`Remove image ${i + 1}`}
+                onClick={() => onRemoveImage(i)}
+                className="absolute left-0.5 top-0.5 rounded bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+                aria-label={`حذف الصورة ${i + 1}`}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -367,6 +434,47 @@ function ImageDropZone({
           ))}
         </div>
       )}
+
+      <textarea
+        value={text}
+        onChange={(e) => onTextChange(e.target.value)}
+        onPaste={handlePaste}
+        rows={4}
+        placeholder="الصق روابط AliExpress، أو الصق صور المنتج (⌘V / Ctrl+V)، أو اسحب الصور إلى هنا"
+        className="ltr block w-full resize-y bg-transparent p-1 font-mono text-xs outline-none placeholder:text-zinc-400"
+        dir="ltr"
+        disabled={disabled}
+      />
+
+      <div className="mt-2 flex items-center justify-between border-t border-dashed border-zinc-200 pt-2 text-xs text-zinc-500 dark:border-zinc-800">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          disabled={disabled}
+        >
+          <Upload className="h-3.5 w-3.5" />
+          اختر صورًا
+        </button>
+        {images.length > 0 && (
+          <span>
+            {images.length} {images.length === 1 ? 'صورة' : 'صور'}
+          </span>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept="image/*"
+        className="hidden"
+        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) onAddImages(files);
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }
@@ -375,7 +483,7 @@ function ImageDropZone({
 
 export default function Home() {
   const [products, setProducts] = useState<ProductState[]>(() => [newProduct(1)]);
-  const [byok, setByok] = useState<ByokState>(null);
+  const [byok, setByok] = useState<ByokState | null>(null);
   const [byokOpen, setByokOpen] = useState(false);
   const [quota, setQuota] = useState<{ used: number; remaining: number } | null>(null);
 
@@ -385,11 +493,11 @@ export default function Home() {
       const raw = localStorage.getItem(BYOK_STORAGE_KEY);
       if (raw) setByok(JSON.parse(raw));
     } catch {
-      /* corrupt JSON — ignore, user can re-enter */
+      /* corrupt — ignore */
     }
   }, []);
 
-  // Fetch quota on mount and whenever BYOK state changes (quota irrelevant if BYOK active).
+  // Fetch quota on mount and whenever BYOK changes (quota doesn't apply under BYOK).
   useEffect(() => {
     if (byok) {
       setQuota(null);
@@ -401,29 +509,25 @@ export default function Home() {
         if (data?.quota) setQuota({ used: data.quota.used, remaining: data.quota.remaining });
       })
       .catch(() => {
-        /* non-fatal — UI will just not show a quota indicator */
+        /* non-fatal */
       });
   }, [byok]);
 
-  const persistByok = useCallback((next: ByokState) => {
+  const persistByok = useCallback((next: ByokState | null) => {
     setByok(next);
     try {
       if (next) localStorage.setItem(BYOK_STORAGE_KEY, JSON.stringify(next));
       else localStorage.removeItem(BYOK_STORAGE_KEY);
     } catch {
-      /* storage may be disabled (Safari private mode) — in-memory still works */
+      /* storage disabled — in-memory still works this session */
     }
   }, []);
 
-  const updateProduct = useCallback(
-    (id: string, patch: Partial<ProductState>) => {
-      setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-    },
-    [],
-  );
+  const updateProduct = useCallback((id: string, patch: Partial<ProductState>) => {
+    setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
 
-  const addProduct = () =>
-    setProducts((ps) => [...ps, newProduct(ps.length + 1)]);
+  const addProduct = () => setProducts((ps) => [...ps, newProduct(ps.length + 1)]);
 
   const removeProduct = (id: string) =>
     setProducts((ps) => (ps.length > 1 ? ps.filter((p) => p.id !== id) : ps));
@@ -449,9 +553,9 @@ export default function Home() {
   const generate = async (id: string) => {
     const p = products.find((x) => x.id === id);
     if (!p) return;
-    const urls = parseUrls(p.urls);
+    const urls = parseUrls(p.text);
     if (urls.length === 0 && p.images.length === 0) {
-      updateProduct(id, { error: 'Add at least one URL or one image.' });
+      updateProduct(id, { error: 'أضف رابطًا واحدًا على الأقل أو صورة واحدة.' });
       return;
     }
     updateProduct(id, { loading: true, error: null });
@@ -461,6 +565,7 @@ export default function Home() {
       if (byok) {
         headers['x-byok-provider'] = byok.provider;
         headers['x-byok-key'] = byok.key;
+        if (byok.model) headers['x-byok-model'] = byok.model;
       }
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -471,9 +576,8 @@ export default function Home() {
       if (!res.ok) {
         updateProduct(id, {
           loading: false,
-          error: data?.message || 'Something went wrong. Try again.',
+          error: data?.message || 'حدث خطأ. حاول مرة أخرى.',
         });
-        // Sync quota display — a quota_exhausted response tells us where we are.
         if (typeof data?.used === 'number') {
           setQuota({ used: data.used, remaining: Math.max(0, data.remaining ?? 0) });
         }
@@ -486,7 +590,7 @@ export default function Home() {
     } catch (err) {
       updateProduct(id, {
         loading: false,
-        error: err instanceof Error ? err.message : 'Network error.',
+        error: err instanceof Error ? err.message : 'خطأ في الشبكة.',
       });
     }
   };
@@ -507,7 +611,7 @@ export default function Home() {
       .filter((p) => !!p.result)
       .map((p) => ({
         name: p.name,
-        urls: parseUrls(p.urls),
+        urls: parseUrls(p.text),
         listing: p.result as Listing,
       }));
     if (rows.length === 0) return;
@@ -517,10 +621,10 @@ export default function Home() {
   };
 
   const quotaLabel = useMemo(() => {
-    if (byok) return 'Unlimited (your key)';
+    if (byok) return 'غير محدود (مفتاحك)';
     if (!quota) return null;
-    if (quota.remaining <= 0) return '0 free left — add a key to continue';
-    return `${quota.remaining} of 10 free left`;
+    if (quota.remaining <= 0) return 'انتهت التجارب المجانية';
+    return `${quota.remaining} من 10 تجارب مجانية`;
   }, [byok, quota]);
 
   return (
@@ -533,8 +637,8 @@ export default function Home() {
               <Zap className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <h1 className="text-base font-semibold">Noon Product Description</h1>
-              <p className="text-xs text-zinc-500">by The360Squad</p>
+              <h1 className="text-base font-semibold">مولد أوصاف منتجات نون</h1>
+              <p className="text-xs text-zinc-500 ltr">by The360Squad</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -549,7 +653,7 @@ export default function Home() {
               className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
             >
               {byok ? <KeyRound className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}
-              {byok ? 'Your key' : 'Settings'}
+              {byok ? 'مفتاحك' : 'الإعدادات'}
             </button>
           </div>
         </div>
@@ -558,26 +662,24 @@ export default function Home() {
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         {/* Intro */}
         <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
-          <h2 className="mb-1 text-lg font-semibold">Generate Noon-ready listings</h2>
+          <h2 className="mb-1 text-lg font-semibold">أنشئ قوائم جاهزة لنون</h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Paste AliExpress URLs or drop product images. You get a Noon-compliant title,
-            description, and 5 feature bullets — in both English and Arabic. Add more products,
-            then export everything as one CSV.
+            الصق روابط AliExpress أو ألصق صور المنتج. ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
           </p>
         </section>
 
         {/* Quota exhausted hint */}
         {!byok && quota && quota.remaining === 0 && (
           <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-            <strong>Free quota reached.</strong> You&apos;ve used all 10 free generations.{' '}
+            <strong>انتهت التجارب المجانية.</strong> استخدمت جميع التجارب العشر.{' '}
             <button
               type="button"
               onClick={() => setByokOpen(true)}
               className="underline underline-offset-2"
             >
-              Add your own API key
+              أضف مفتاح API الخاص بك
             </button>{' '}
-            to continue — it stays in your browser and gives you unlimited generations on your own quota.
+            للاستمرار — يُحفظ في متصفحك ويمنحك إنشاءات غير محدودة على حسابك.
           </div>
         )}
 
@@ -594,54 +696,46 @@ export default function Home() {
                   value={p.name}
                   onChange={(e) => updateProduct(p.id, { name: e.target.value })}
                   className="flex-1 bg-transparent text-sm font-semibold outline-none"
-                  aria-label="Product name"
+                  aria-label="اسم المنتج"
                 />
                 {products.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeProduct(p.id)}
                     className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-900"
-                    aria-label={`Remove product ${idx + 1}`}
+                    aria-label={`حذف المنتج ${idx + 1}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 )}
               </header>
 
-              <div className="grid gap-4 p-4 sm:grid-cols-2">
+              <div className="space-y-3 p-4">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                    AliExpress URLs (one per line)
+                    الروابط والصور
                   </label>
-                  <textarea
-                    value={p.urls}
-                    onChange={(e) => updateProduct(p.id, { urls: e.target.value })}
-                    rows={4}
-                    placeholder="https://www.aliexpress.com/item/..."
-                    className="block w-full resize-y rounded-md border border-zinc-300 bg-white p-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                  <UnifiedInput
+                    text={p.text}
+                    onTextChange={(v) => updateProduct(p.id, { text: v })}
+                    images={p.images}
+                    onAddImages={(files) => addImagesTo(p.id, files)}
+                    onRemoveImage={(i) =>
+                      updateProduct(p.id, { images: p.images.filter((_, idx2) => idx2 !== i) })
+                    }
+                    disabled={p.loading}
                   />
-                  <label className="mt-3 mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                    Note (optional)
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    ملاحظة (اختياري)
                   </label>
                   <textarea
                     value={p.note}
                     onChange={(e) => updateProduct(p.id, { note: e.target.value })}
                     rows={2}
-                    placeholder="e.g. Target: Saudi market, women 25-40, price sweet spot 89 SAR"
+                    placeholder="مثال: السوق المستهدف السعودية، نساء 25-40، سعر حوالي 89 ريال"
                     className="block w-full resize-y rounded-md border border-zinc-300 bg-white p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                    Product images (up to 10)
-                  </label>
-                  <ImageDropZone
-                    images={p.images}
-                    onAdd={(files) => addImagesTo(p.id, files)}
-                    onRemove={(i) =>
-                      updateProduct(p.id, { images: p.images.filter((_, idx2) => idx2 !== i) })
-                    }
-                    disabled={p.loading}
                   />
                 </div>
               </div>
@@ -649,7 +743,7 @@ export default function Home() {
               <div className="flex items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <div className="min-w-0 flex-1 text-xs text-zinc-500">
                   {p.error && <span className="text-red-600">{p.error}</span>}
-                  {!p.error && p.result && <span className="text-emerald-600">Generated ✓</span>}
+                  {!p.error && p.result && <span className="text-emerald-600">تم الإنشاء ✓</span>}
                 </div>
                 <button
                   type="button"
@@ -660,20 +754,28 @@ export default function Home() {
                   {p.loading ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : p.result ? (
-                    'Regenerate'
+                    'إعادة الإنشاء'
                   ) : (
-                    'Generate'
+                    'أنشئ'
                   )}
                 </button>
               </div>
 
-              {/* Result panel */}
+              {/* Result panel — Arabic first (primary audience), English second */}
               {p.result && (
                 <div className="space-y-3 border-t border-zinc-200 p-4 dark:border-zinc-800">
-                  <CodeBlock label="English — Title" text={p.result.en.title} />
-                  <CodeBlock label="English — Description + Features" text={renderListingEn(p.result)} />
-                  <CodeBlock label="العربية — العنوان" text={p.result.ar.title} rtl />
-                  <CodeBlock label="العربية — الوصف والميزات" text={renderListingAr(p.result)} rtl />
+                  <CodeBlock label="العربية — العنوان" text={p.result.ar.title} direction="rtl" />
+                  <CodeBlock
+                    label="العربية — الوصف والميزات"
+                    text={renderListingAr(p.result)}
+                    direction="rtl"
+                  />
+                  <CodeBlock label="English — Title" text={p.result.en.title} direction="ltr" />
+                  <CodeBlock
+                    label="English — Description + Features"
+                    text={renderListingEn(p.result)}
+                    direction="ltr"
+                  />
                 </div>
               )}
             </article>
@@ -688,7 +790,7 @@ export default function Home() {
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             <Plus className="h-4 w-4" />
-            Add another product
+            أضف منتجًا آخر
           </button>
 
           <button
@@ -697,7 +799,7 @@ export default function Home() {
             disabled={products.every((p) => p.loading || !!p.result)}
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
-            Generate all pending
+            أنشئ الكل
           </button>
 
           <div className="flex-1" />
@@ -709,22 +811,17 @@ export default function Home() {
             className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
-            Export {completedCount > 0 ? `${completedCount} ` : ''}to CSV
+            تصدير {completedCount > 0 ? `${completedCount} ` : ''}إلى CSV
           </button>
         </div>
 
         <footer className="mt-10 text-center text-xs text-zinc-500">
-          Noon compliance rules enforced: no emojis in descriptions/bullets, 20-200 char titles,
-          5 features capped at 250 chars each. Powered by Claude Haiku 4.5.
+          يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا. <span className="ltr">Powered by Claude Haiku 4.5 (default)</span>
         </footer>
       </main>
 
       {byokOpen && (
-        <ByokModal
-          initial={byok}
-          onSave={persistByok}
-          onClose={() => setByokOpen(false)}
-        />
+        <ByokModal initial={byok} onSave={persistByok} onClose={() => setByokOpen(false)} />
       )}
     </div>
   );

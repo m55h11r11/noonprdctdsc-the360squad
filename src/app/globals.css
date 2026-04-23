@@ -19,22 +19,31 @@
   }
 }
 
+/* The whole app is Arabic-first (dir="rtl" on <html>). Pick an Arabic-capable
+ * font stack as the default body font. Geist stays available for Latin runs
+ * via mono/sans CSS vars, but the default body is readable in Arabic. */
 body {
   background: var(--background);
   color: var(--foreground);
-}
-
-/* Arabic text blocks: render right-to-left and use a font stack that renders Arabic well. */
-.rtl {
-  direction: rtl;
-  text-align: right;
   font-family:
     "IBM Plex Sans Arabic",
     "Noto Naskh Arabic",
     "Amiri",
-    "Segoe UI",
+    var(--font-geist-sans),
     system-ui,
     sans-serif;
+}
+
+/* Individual code blocks flip direction based on their content language.
+ * Wrap Arabic code blocks in `.rtl`; wrap English code blocks in `.ltr`.
+ * The defaults inherit from <html dir="rtl">. */
+.ltr {
+  direction: ltr;
+  text-align: left;
+}
+.rtl {
+  direction: rtl;
+  text-align: right;
 }
 
 /* Scrollbar polish inside code blocks. */

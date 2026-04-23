@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateObject } from 'ai';
 import { ListingSchema, GenerateRequestSchema } from '@/lib/schema';
 import { NOON_SYSTEM_PROMPT, buildUserPrompt } from '@/lib/prompt';
-import { resolveModel, type ByokProvider } from '@/lib/providers';
+import { resolveModel, isByokProvider } from '@/lib/providers';
 import { checkQuota, FREE_QUOTA, currentUsage } from '@/lib/ratelimit';
 
 // Fluid Compute (default) — full Node.js runtime. 60s is plenty for Haiku.
@@ -19,9 +19,9 @@ function getClientIp(req: NextRequest): string {
   return 'unknown';
 }
 
-function validProvider(raw: string | null): ByokProvider | undefined {
-  if (raw === 'anthropic' || raw === 'google') return raw;
-  return undefined;
+function validProvider(raw: string | null) {
+  if (!raw) return undefined;
+  return isByokProvider(raw) ? raw : undefined;
 }
 
 export async function GET(req: NextRequest) {
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
   // Parse BYOK headers first — a valid BYOK bypasses the free quota entirely.
   const byokProvider = validProvider(req.headers.get('x-byok-provider'));
   const byokKey = req.headers.get('x-byok-key') || undefined;
+  const byokModel = req.headers.get('x-byok-model')?.trim() || undefined;
   const usingByok = !!(byokProvider && byokKey && byokKey.length > 10);
 
   if (!usingByok) {
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
     quotaState = { used: consumed.used, remaining: consumed.remaining };
   }
 
-  const { model, label } = resolveModel({ provider: byokProvider, key: byokKey });
+  const { model, label } = resolveModel({ provider: byokProvider, key: byokKey, model: byokModel });
 
   try {
     const result = await generateObject({

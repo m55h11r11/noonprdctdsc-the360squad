@@ -15,14 +15,13 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://noonprdctdsc-the360squad.vercel.app'),
-  title: 'Noon Product Description Generator — The360Squad',
+  title: 'مولد أوصاف منتجات نون — The360Squad',
   description:
-    'Turn AliExpress product URLs and images into Noon.com-ready bilingual listings (English + Arabic). Noon-compliant, multi-product, CSV export.',
+    'حوّل روابط AliExpress وصور المنتج إلى قوائم نون جاهزة بالعربية والإنجليزية. متوافق مع قواعد نون، يدعم عدة منتجات، وتصدير CSV.',
   robots: { index: true, follow: true },
   openGraph: {
-    title: 'Noon Product Description Generator — The360Squad',
-    description:
-      'Turn AliExpress product URLs and images into Noon-compliant bilingual listings (English + Arabic).',
+    title: 'مولد أوصاف منتجات نون — The360Squad',
+    description: 'أنشئ أوصاف منتجات متوافقة مع نون بالعربية والإنجليزية من روابط AliExpress.',
     type: 'website',
     url: 'https://noonprdctdsc-the360squad.vercel.app',
   },
@@ -34,7 +33,8 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
-      lang="en"
+      lang="ar"
+      dir="rtl"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
