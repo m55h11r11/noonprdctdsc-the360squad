@@ -6,11 +6,11 @@ import {
   DragEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
 import {
+  ArrowUpRight,
   Check,
   Copy,
   Download,
@@ -18,6 +18,7 @@ import {
   Loader2,
   Plus,
   Settings,
+  Sparkles,
   Trash2,
   Upload,
   X,
@@ -485,7 +486,6 @@ export default function Home() {
   const [products, setProducts] = useState<ProductState[]>(() => [newProduct(1)]);
   const [byok, setByok] = useState<ByokState | null>(null);
   const [byokOpen, setByokOpen] = useState(false);
-  const [quota, setQuota] = useState<{ used: number; remaining: number } | null>(null);
 
   // Load BYOK from localStorage on mount.
   useEffect(() => {
@@ -496,22 +496,6 @@ export default function Home() {
       /* corrupt — ignore */
     }
   }, []);
-
-  // Fetch quota on mount and whenever BYOK changes (quota doesn't apply under BYOK).
-  useEffect(() => {
-    if (byok) {
-      setQuota(null);
-      return;
-    }
-    fetch('/api/generate')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.quota) setQuota({ used: data.quota.used, remaining: data.quota.remaining });
-      })
-      .catch(() => {
-        /* non-fatal */
-      });
-  }, [byok]);
 
   const persistByok = useCallback((next: ByokState | null) => {
     setByok(next);
@@ -553,6 +537,11 @@ export default function Home() {
   const generate = async (id: string) => {
     const p = products.find((x) => x.id === id);
     if (!p) return;
+    if (!byok) {
+      updateProduct(id, { error: 'أضف مفتاح API في الإعدادات أولًا.' });
+      setByokOpen(true);
+      return;
+    }
     const urls = parseUrls(p.text);
     if (urls.length === 0 && p.images.length === 0) {
       updateProduct(id, { error: 'أضف رابطًا واحدًا على الأقل أو صورة واحدة.' });
@@ -561,12 +550,12 @@ export default function Home() {
     updateProduct(id, { loading: true, error: null });
 
     try {
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
-      if (byok) {
-        headers['x-byok-provider'] = byok.provider;
-        headers['x-byok-key'] = byok.key;
-        if (byok.model) headers['x-byok-model'] = byok.model;
-      }
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        'x-byok-provider': byok.provider,
+        'x-byok-key': byok.key,
+      };
+      if (byok.model) headers['x-byok-model'] = byok.model;
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers,
@@ -574,19 +563,18 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) {
+        // If the server reports byok_required (stale key, wiped localStorage,
+        // etc.) reopen the settings modal so the user can re-enter one.
+        if (data?.error === 'byok_required') {
+          setByokOpen(true);
+        }
         updateProduct(id, {
           loading: false,
           error: data?.message || 'حدث خطأ. حاول مرة أخرى.',
         });
-        if (typeof data?.used === 'number') {
-          setQuota({ used: data.used, remaining: Math.max(0, data.remaining ?? 0) });
-        }
         return;
       }
       updateProduct(id, { loading: false, error: null, result: data.listing });
-      if (data?.meta?.quota) {
-        setQuota({ used: data.meta.quota.used, remaining: data.meta.quota.remaining });
-      }
     } catch (err) {
       updateProduct(id, {
         loading: false,
@@ -620,12 +608,9 @@ export default function Home() {
     downloadCsv(`noon-listings-${stamp}.csv`, csv);
   };
 
-  const quotaLabel = useMemo(() => {
-    if (byok) return 'غير محدود (مفتاحك)';
-    if (!quota) return null;
-    if (quota.remaining <= 0) return 'انتهت التجارب المجانية';
-    return `${quota.remaining} من 10 تجارب مجانية`;
-  }, [byok, quota]);
+  const byokLabel = byok
+    ? PROVIDER_OPTIONS.find((p) => p.id === byok.provider)?.label ?? byok.provider
+    : null;
 
   return (
     <div className="min-h-screen">
@@ -642,18 +627,22 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {quotaLabel && (
-              <span className="hidden rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 sm:inline">
-                {quotaLabel}
+            {byokLabel && (
+              <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 sm:inline">
+                {byokLabel}
               </span>
             )}
             <button
               type="button"
               onClick={() => setByokOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium ${
+                byok
+                  ? 'border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900'
+                  : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200'
+              }`}
             >
               {byok ? <KeyRound className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}
-              {byok ? 'مفتاحك' : 'الإعدادات'}
+              {byok ? 'مفتاحك' : 'ابدأ الإعداد'}
             </button>
           </div>
         </div>
@@ -668,19 +657,49 @@ export default function Home() {
           </p>
         </section>
 
-        {/* Quota exhausted hint */}
-        {!byok && quota && quota.remaining === 0 && (
-          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-            <strong>انتهت التجارب المجانية.</strong> استخدمت جميع التجارب العشر.{' '}
-            <button
-              type="button"
-              onClick={() => setByokOpen(true)}
-              className="underline underline-offset-2"
-            >
-              أضف مفتاح API الخاص بك
-            </button>{' '}
-            للاستمرار — يُحفظ في متصفحك ويمنحك إنشاءات غير محدودة على حسابك.
-          </div>
+        {/* Onboarding — shown until the user configures a BYOK key. The free
+             Gemini link is the lowest-friction path (30-second setup, free tier
+             with real quota). Other providers live in the Settings modal. */}
+        {!byok && (
+          <section className="mb-6 overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-br from-yellow-50 via-white to-white p-5 dark:border-zinc-800 dark:from-yellow-950/20 dark:via-zinc-950 dark:to-zinc-950 sm:p-6">
+            <div className="mb-1 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">
+                ابدأ خلال 30 ثانية
+              </span>
+            </div>
+            <h2 className="mb-1 text-lg font-semibold">
+              أحضر مفتاح API خاصًا بك للبدء
+            </h2>
+            <p className="mb-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+              هذه الأداة تستخدم مفتاحك الخاص — لا حساب مطلوب، ولا رسوم من جانبنا.
+              يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لكل عملية.
+              الخيار الأسرع هو{' '}
+              <strong>مفتاح Gemini المجاني من Google</strong> — ينشأ في أقل من دقيقة.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-zinc-900 shadow-sm hover:bg-yellow-400"
+              >
+                احصل على مفتاح Gemini مجاني
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setByokOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                <KeyRound className="h-4 w-4" />
+                لديّ مفتاح بالفعل
+              </button>
+              <span className="ltr ml-auto text-xs text-zinc-500">
+                Anthropic · OpenAI · Groq · Mistral · OpenRouter also supported
+              </span>
+            </div>
+          </section>
         )}
 
         {/* Product cards */}
@@ -748,7 +767,8 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => generate(p.id)}
-                  disabled={p.loading}
+                  disabled={p.loading || !byok}
+                  title={!byok ? 'أضف مفتاح API في الإعدادات أولًا' : undefined}
                   className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
                 >
                   {p.loading ? (
@@ -796,7 +816,8 @@ export default function Home() {
           <button
             type="button"
             onClick={generateAll}
-            disabled={products.every((p) => p.loading || !!p.result)}
+            disabled={!byok || products.every((p) => p.loading || !!p.result)}
+            title={!byok ? 'أضف مفتاح API في الإعدادات أولًا' : undefined}
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             أنشئ الكل
@@ -816,7 +837,8 @@ export default function Home() {
         </div>
 
         <footer className="mt-10 text-center text-xs text-zinc-500">
-          يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا. <span className="ltr">Powered by Claude Haiku 4.5 (default)</span>
+          يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا.{' '}
+          <span className="ltr">Bring-your-own-key · by The360Squad</span>
         </footer>
       </main>
 

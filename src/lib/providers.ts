@@ -1,19 +1,12 @@
-import { gateway } from '@ai-sdk/gateway';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModel } from 'ai';
 
-// Default provider: Vercel AI Gateway with Claude Haiku 4.5. Cheap, fast,
-// multi-modal native, good at instruction-following and bilingual output.
-export const DEFAULT_MODEL_ID = 'anthropic/claude-haiku-4-5';
+// This app is bring-your-own-key only — there is no server-side fallback
+// provider, which means the deploy owner NEVER pays for an end-user's
+// generation. Every call is attributed to the key the user provides.
 
-// Supported BYOK providers. Kept narrow (6) to avoid bloat, but broad enough
-// to cover every major AI shop a user might already have a key for.
-// - anthropic + google use their native SDKs (native multi-modal).
-// - everything else is routed through @ai-sdk/openai with a baseURL swap.
-//   This lets us support 4 more providers with zero extra dependencies,
-//   since they all speak the OpenAI Chat Completions wire protocol.
 export const BYOK_PROVIDERS = [
   'anthropic',
   'google',
@@ -66,6 +59,8 @@ export const PROVIDER_META: Record<
 };
 
 // OpenAI-compatible base URLs. Any provider here just swaps baseURL.
+// This lets us support 4 extra providers with a single SDK dependency
+// (they all speak the OpenAI Chat Completions wire protocol).
 const OPENAI_COMPAT_BASE: Partial<Record<ByokProvider, string>> = {
   groq: 'https://api.groq.com/openai/v1',
   mistral: 'https://api.mistral.ai/v1',
@@ -78,32 +73,35 @@ export function isByokProvider(x: unknown): x is ByokProvider {
 }
 
 export function resolveModel(byok: {
-  provider?: ByokProvider;
-  key?: string;
-  model?: string; // optional user override; falls back to PROVIDER_META default
+  provider: ByokProvider;
+  key: string;
+  model?: string;
 }): { model: LanguageModel; label: string } {
-  if (byok.provider && byok.key) {
-    const meta = PROVIDER_META[byok.provider];
-    const modelId = (byok.model && byok.model.trim()) || meta.defaultModel;
+  const meta = PROVIDER_META[byok.provider];
+  const modelId = (byok.model && byok.model.trim()) || meta.defaultModel;
 
-    switch (byok.provider) {
-      case 'anthropic': {
-        const client = createAnthropic({ apiKey: byok.key });
-        return { model: client(modelId), label: `byok:anthropic:${modelId}` };
-      }
-      case 'google': {
-        const client = createGoogleGenerativeAI({ apiKey: byok.key });
-        return { model: client(modelId), label: `byok:google:${modelId}` };
-      }
-      case 'openai':
-      case 'groq':
-      case 'mistral':
-      case 'openrouter': {
-        const baseURL = OPENAI_COMPAT_BASE[byok.provider];
-        const client = createOpenAI({ apiKey: byok.key, ...(baseURL ? { baseURL } : {}) });
-        return { model: client(modelId), label: `byok:${byok.provider}:${modelId}` };
-      }
+  switch (byok.provider) {
+    case 'anthropic': {
+      const client = createAnthropic({ apiKey: byok.key });
+      return { model: client(modelId), label: `byok:anthropic:${modelId}` };
+    }
+    case 'google': {
+      const client = createGoogleGenerativeAI({ apiKey: byok.key });
+      return { model: client(modelId), label: `byok:google:${modelId}` };
+    }
+    case 'openai':
+    case 'groq':
+    case 'mistral':
+    case 'openrouter': {
+      const baseURL = OPENAI_COMPAT_BASE[byok.provider];
+      const client = createOpenAI({
+        apiKey: byok.key,
+        ...(baseURL ? { baseURL } : {}),
+      });
+      return {
+        model: client(modelId),
+        label: `byok:${byok.provider}:${modelId}`,
+      };
     }
   }
-  return { model: gateway(DEFAULT_MODEL_ID), label: `gateway:${DEFAULT_MODEL_ID}` };
 }
