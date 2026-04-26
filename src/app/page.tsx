@@ -30,20 +30,14 @@ import {
 import { fileToResizedDataUrl } from '@/lib/image';
 import { downloadCsv, productsToCsv, type ProductRow } from '@/lib/csv';
 import { ListingSchema, type Listing } from '@/lib/schema';
-import { BYOK_PROVIDERS, PROVIDER_META } from '@/lib/providers-meta';
+import { BYOK_PROVIDERS, PROVIDER_META, type ByokProvider } from '@/lib/providers-meta';
 import { getSupabase, supabaseConfigured } from '@/lib/supabase/client';
 import { RESTORE_RECENT_COUNT } from '@/lib/config';
 import type { Session, User } from '@supabase/supabase-js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-
-type ByokProvider =
-  | 'anthropic'
-  | 'google'
-  | 'openai'
-  | 'groq'
-  | 'mistral'
-  | 'openrouter';
+// ByokProvider is imported from providers-meta — single source of truth
+// (was previously redeclared as a literal union; removed to prevent drift).
 
 interface ByokState {
   provider: ByokProvider;
@@ -565,12 +559,14 @@ function SyncModal({
   onSignIn,
   onSignOut,
   onDeleteAll,
+  signOutPending,
 }: {
   user: User | null;
   onClose: () => void;
   onSignIn: () => void;
   onSignOut: () => void;
   onDeleteAll: () => void;
+  signOutPending: boolean;
 }) {
   const isSignedIn = !!user && !user.is_anonymous;
   const email = user?.email ?? '';
@@ -580,7 +576,11 @@ function SyncModal({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
+      onClick={() => {
+        // Block dismiss while sign-out is mid-drain — closing here would
+        // leave the modal in an inconsistent state (handlers still firing).
+        if (!signOutPending) onClose();
+      }}
     >
       <div
         className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
@@ -591,7 +591,8 @@ function SyncModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            disabled={signOutPending}
+            className="rounded p-1 text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800"
             aria-label="إغلاق"
           >
             <X className="h-4 w-4" />
@@ -610,15 +611,26 @@ function SyncModal({
               <button
                 type="button"
                 onClick={onSignOut}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                disabled={signOutPending}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
-                <LogOut className="h-4 w-4" />
-                تسجيل الخروج من هذا الجهاز
+                {signOutPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جارٍ حفظ آخر العناصر…
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-4 w-4" />
+                    تسجيل الخروج من هذا الجهاز
+                  </>
+                )}
               </button>
               <button
                 type="button"
                 onClick={onDeleteAll}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                disabled={signOutPending}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
               >
                 <Trash2 className="h-4 w-4" />
                 حذف جميع بياناتي
@@ -770,6 +782,11 @@ export default function Home() {
   // modal stays mounted (showing "جارٍ الحذف…") while the DELETE round-trips.
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  // Sign-out runs an async drain of pendingSaves, then signOut, then a fresh
+  // signInAnonymously — that can take a noticeable beat on slow networks. We
+  // surface it inside SyncModal so the user sees "جارٍ الحفظ ثم الخروج…" instead
+  // of a frozen UI. Falls through to the existing modal close once done.
+  const [signOutPending, setSignOutPending] = useState(false);
   // Tracks product IDs whose generate() call is in flight. Used to short-
   // circuit double-clicks before React's loading=true state has propagated.
   const inFlight = useRef<Set<string>>(new Set());
@@ -1062,25 +1079,46 @@ export default function Home() {
     });
   }, []);
 
+  // Wait for in-flight saves to commit, but cap at 3s so a hung fetch on
+  // bad network can't freeze sign-out / delete forever. Worst case a row
+  // gets orphaned — already an accepted failure mode for the fire-and-forget
+  // save path. Returns when drain completes or the timer expires, whichever
+  // comes first.
+  const drainPendingSaves = useCallback(async () => {
+    if (pendingSaves.current.size === 0) return;
+    await Promise.race([
+      Promise.allSettled(Array.from(pendingSaves.current)),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  }, []);
+
   const handleSignOut = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
-    // Drain in-flight saves so rows commit under the outgoing user_id, not
-    // get orphaned when the session is discarded. Worst case the user waits
-    // a fraction of a second before sign-out completes.
-    if (pendingSaves.current.size > 0) {
-      await Promise.allSettled(Array.from(pendingSaves.current));
+    setSignOutPending(true);
+    try {
+      // Drain pending saves first so rows commit under the outgoing user_id.
+      await drainPendingSaves();
+      await supabase.auth.signOut();
+      // Bootstrap a fresh anonymous session so the app stays usable.
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        // Anon sign-in failed — strip cloud state so we don't post-401 saves
+        // into the void. The user can refresh to retry.
+        console.warn('[cloud] anonymous re-sign-in failed after sign-out:', error.message);
+        setCloudUser(null);
+        setCloudReady(false);
+      } else {
+        setCloudUser(data.user ?? null);
+      }
+      // Reset visible products — leaving the previous user's listings on
+      // screen under the new anonymous session is dishonest UX.
+      setProducts([newProduct(1)]);
+      setSyncOpen(false);
+    } finally {
+      setSignOutPending(false);
     }
-    await supabase.auth.signOut();
-    // After sign-out, bootstrap a fresh anonymous session so the app stays usable.
-    const { data } = await supabase.auth.signInAnonymously();
-    setCloudUser(data.user ?? null);
-    // Reset the visible products too — leaving the previous user's listings
-    // on screen under the new anonymous session is dishonest UX (the next
-    // save would land under the new id, not the one the user can see).
-    setProducts([newProduct(1)]);
-    setSyncOpen(false);
-  }, []);
+  }, [drainPendingSaves]);
 
   // Open the confirm modal. The actual destructive call is in
   // handleConfirmDeleteAll. Splitting the two means the modal can keep
@@ -1092,22 +1130,38 @@ export default function Home() {
   const handleConfirmDeleteAll = useCallback(async () => {
     setDeletePending(true);
     try {
-      await fetch('/api/listings', { method: 'DELETE' });
-    } catch {
-      /* non-fatal — user can retry */
+      // Drain pending saves so a save that lands AFTER the DELETE doesn't
+      // immediately re-create an orphan row under the about-to-be-replaced
+      // anonymous user_id.
+      await drainPendingSaves();
+      try {
+        await fetch('/api/listings', { method: 'DELETE' });
+      } catch {
+        /* non-fatal — user can retry */
+      }
+      // Reset local state to a clean slate.
+      setProducts([newProduct(1)]);
+      setSyncOpen(false);
+      // Re-sign-in anonymously so the session continues to work.
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error) {
+          console.warn('[cloud] anonymous re-sign-in failed after delete:', error.message);
+          setCloudUser(null);
+          setCloudReady(false);
+        } else {
+          setCloudUser(data.user ?? null);
+        }
+      }
+    } finally {
+      // CRITICAL: clear pending FIRST, then close the modal — otherwise the
+      // modal unmounts while pending=true, and the next open would briefly
+      // flash "جارٍ الحذف…" before the new instance settles.
+      setDeletePending(false);
+      setConfirmDeleteOpen(false);
     }
-    // Reset local state to a clean slate.
-    setProducts([newProduct(1)]);
-    setSyncOpen(false);
-    setConfirmDeleteOpen(false);
-    // Re-sign-in anonymously so the session continues to work.
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data } = await supabase.auth.signInAnonymously();
-      setCloudUser(data.user ?? null);
-    }
-    setDeletePending(false);
-  }, []);
+  }, [drainPendingSaves]);
 
   const generateAll = async () => {
     // Snapshot the eligible IDs once so we don't react to setState changes
@@ -1422,6 +1476,7 @@ export default function Home() {
           onSignIn={handleGoogleSignIn}
           onSignOut={handleSignOut}
           onDeleteAll={handleDeleteAll}
+          signOutPending={signOutPending}
         />
       )}
 

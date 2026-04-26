@@ -51,8 +51,14 @@ export async function POST(req: NextRequest) {
     old_user_id: parsed.data.anonUserId,
   });
   if (error) {
+    // Don't echo the SQL error message to the wire — it can leak DB internals
+    // (function names, search_path quirks, internal raise() strings). Log it
+    // server-side so the owner can debug from Vercel logs.
+    console.warn(
+      `[listings:migrate] rpc failed for user=${user.id} anon=${parsed.data.anonUserId}: ${error.message}`,
+    );
     return NextResponse.json(
-      { error: 'migration_failed', message: error.message },
+      { error: 'migration_failed' },
       { status: 400 },
     );
   }

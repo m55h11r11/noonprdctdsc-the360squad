@@ -31,14 +31,19 @@ create index if not exists listings_user_created_idx
 
 alter table listings enable row level security;
 
+-- Drop-then-create so this script is idempotent on re-runs. Postgres has no
+-- `create policy if not exists` syntax — this is the closest equivalent.
+drop policy if exists "read own listings" on listings;
 create policy "read own listings"
   on listings for select
   using (auth.uid() = user_id);
 
+drop policy if exists "insert own listings" on listings;
 create policy "insert own listings"
   on listings for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "delete own listings" on listings;
 create policy "delete own listings"
   on listings for delete
   using (auth.uid() = user_id);
