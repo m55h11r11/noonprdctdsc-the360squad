@@ -33,11 +33,3 @@ export async function fileToResizedDataUrl(file: File): Promise<string> {
   // flattened onto white, which is the Noon-preferred background anyway.
   return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
 }
-
-export function estimateDataUrlBytes(dataUrl: string): number {
-  // base64 inflates by ~4/3 of raw bytes.
-  const commaIdx = dataUrl.indexOf(',');
-  if (commaIdx === -1) return 0;
-  const b64 = dataUrl.slice(commaIdx + 1);
-  return Math.floor((b64.length * 3) / 4);
-}

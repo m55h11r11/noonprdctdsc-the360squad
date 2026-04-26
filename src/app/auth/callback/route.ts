@@ -11,7 +11,13 @@ export const runtime = 'nodejs';
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
-  const next = url.searchParams.get('next') ?? '/';
+  const rawNext = url.searchParams.get('next') ?? '/';
+
+  // Open-redirect defense: only allow same-origin relative paths. Without
+  // this, `?next=https://evil.com` would bounce the just-signed-in user
+  // off-site. `//evil.com` is also a protocol-relative URL — both blocked.
+  const safeNext =
+    rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
 
   if (code) {
     const supabase = await getSupabaseServer();
@@ -20,5 +26,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(new URL(next, url.origin));
+  return NextResponse.redirect(new URL(safeNext, url.origin));
 }

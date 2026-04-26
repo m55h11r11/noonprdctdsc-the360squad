@@ -32,7 +32,7 @@ import { downloadCsv, productsToCsv, type ProductRow } from '@/lib/csv';
 import { ListingSchema, type Listing } from '@/lib/schema';
 import { getSupabase, supabaseConfigured } from '@/lib/supabase/client';
 import { RESTORE_RECENT_COUNT } from '@/lib/config';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -712,7 +712,9 @@ export default function Home() {
   const [cloudUser, setCloudUser] = useState<User | null>(null);
   const [cloudReady, setCloudReady] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
-  const [hasCloudSaves, setHasCloudSaves] = useState(false);
+  // Tracks product IDs whose generate() call is in flight. Used to short-
+  // circuit double-clicks before React's loading=true state has propagated.
+  const inFlight = useRef<Set<string>>(new Set());
 
   // Load BYOK from localStorage on mount.
   useEffect(() => {
@@ -791,7 +793,6 @@ export default function Home() {
               } satisfies ProductState];
             });
           if (restored.length > 0) {
-            setHasCloudSaves(true);
             // Restored cards first, then a blank one so the user can keep going.
             setProducts([...restored, newProduct(restored.length + 1)]);
           }
@@ -803,7 +804,7 @@ export default function Home() {
 
     // Subscribe to auth state changes so the UI updates after Google sign-in.
     const { data: sub } = supabase.auth.onAuthStateChange(
-      (_event: string, session: { user: User } | null) => {
+      (_event: string, session: Session | null) => {
         setCloudUser(session?.user ?? null);
       },
     );
@@ -833,12 +834,8 @@ export default function Home() {
     setProducts((ps) => (ps.length > 1 ? ps.filter((p) => p.id !== id) : ps));
 
   const addImagesTo = async (id: string, files: File[]) => {
-    const current = products.find((p) => p.id === id);
-    if (!current) return;
-    const room = Math.max(0, 10 - current.images.length);
-    const accepted = files.slice(0, room);
     const resized = await Promise.all(
-      accepted.map(async (f) => {
+      files.map(async (f) => {
         try {
           return await fileToResizedDataUrl(f);
         } catch {
@@ -847,10 +844,23 @@ export default function Home() {
       }),
     );
     const valid = resized.filter((x): x is string => !!x);
-    updateProduct(id, { images: [...current.images, ...valid] });
+    if (!valid.length) return;
+    // Functional setState so we don't clobber edits the user made (typing,
+    // removing other images) while the async resize was in flight.
+    setProducts((ps) =>
+      ps.map((p) => {
+        if (p.id !== id) return p;
+        const room = Math.max(0, 10 - p.images.length);
+        return { ...p, images: [...p.images, ...valid.slice(0, room)] };
+      }),
+    );
   };
 
   const generate = async (id: string) => {
+    // Synchronous guard against double-clicks. React state updates are async
+    // so a fast second click can fire before `loading=true` propagates —
+    // both calls would burn the user's BYOK quota and race on setResult.
+    if (inFlight.current.has(id)) return;
     const p = products.find((x) => x.id === id);
     if (!p) return;
     if (!byok) {
@@ -863,7 +873,10 @@ export default function Home() {
       updateProduct(id, { error: 'أضف رابطًا واحدًا على الأقل أو صورة واحدة.' });
       return;
     }
-    updateProduct(id, { loading: true, error: null });
+    inFlight.current.add(id);
+    // Clear any prior result so a failed retry doesn't leave the old success
+    // panel sitting next to a fresh red error.
+    updateProduct(id, { loading: true, error: null, result: null });
 
     try {
       const headers: Record<string, string> = {
@@ -912,17 +925,17 @@ export default function Home() {
             generationMs: typeof meta.generationMs === 'number' ? meta.generationMs : null,
             listing: data.listing,
           }),
-        })
-          .then(() => setHasCloudSaves(true))
-          .catch(() => {
-            /* non-fatal */
-          });
+        }).catch(() => {
+          /* non-fatal */
+        });
       }
     } catch (err) {
       updateProduct(id, {
         loading: false,
         error: err instanceof Error ? err.message : 'خطأ في الشبكة.',
       });
+    } finally {
+      inFlight.current.delete(id);
     }
   };
 
@@ -944,6 +957,10 @@ export default function Home() {
     // After sign-out, bootstrap a fresh anonymous session so the app stays usable.
     const { data } = await supabase.auth.signInAnonymously();
     setCloudUser(data.user ?? null);
+    // Reset the visible products too — leaving the previous user's listings
+    // on screen under the new anonymous session is dishonest UX (the next
+    // save would land under the new id, not the one the user can see).
+    setProducts([newProduct(1)]);
     setSyncOpen(false);
   }, []);
 
@@ -959,7 +976,6 @@ export default function Home() {
     }
     // Reset local state to a clean slate.
     setProducts([newProduct(1)]);
-    setHasCloudSaves(false);
     setSyncOpen(false);
     // Re-sign-in anonymously so the session continues to work.
     const supabase = getSupabase();
@@ -970,23 +986,21 @@ export default function Home() {
   }, []);
 
   const generateAll = async () => {
-    for (const p of products) {
-      if (!p.loading && !p.result) {
-        // eslint-disable-next-line no-await-in-loop
-        await generate(p.id);
-      }
-    }
+    // Snapshot the eligible IDs once so we don't react to setState changes
+    // mid-iteration. allSettled keeps one failure from aborting the rest.
+    const ids = products.filter((p) => !p.loading && !p.result).map((p) => p.id);
+    await Promise.allSettled(ids.map((id) => generate(id)));
   };
 
   const completedCount = products.filter((p) => !!p.result).length;
 
   const exportCsv = () => {
     const rows: ProductRow[] = products
-      .filter((p) => !!p.result)
+      .filter((p): p is ProductState & { result: Listing } => p.result !== null)
       .map((p) => ({
         name: p.name,
         urls: parseUrls(p.text),
-        listing: p.result as Listing,
+        listing: p.result,
       }));
     if (rows.length === 0) return;
     const csv = productsToCsv(rows);

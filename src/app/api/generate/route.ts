@@ -111,9 +111,12 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown generation error.';
-    // Common failure: the user's BYOK key is invalid. Surface it clearly so
-    // they open Settings and fix it, not us.
+    const raw = err instanceof Error ? err.message : 'Unknown generation error.';
+    // Some provider SDKs surface the API key inside error strings (e.g. as a
+    // request-URL query param). Scrub the user's own key from the detail
+    // before echoing it back — defense in depth, since error strings often
+    // get screenshot/logged.
+    const msg = byokKey ? raw.replaceAll(byokKey, '[redacted]') : raw;
     const looksLikeAuth = /401|403|unauthori[sz]ed|api.?key|invalid.?key/i.test(msg);
     const hint = looksLikeAuth
       ? 'Your API key was rejected by the provider. Check it in Settings.'
