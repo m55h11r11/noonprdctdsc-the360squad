@@ -1006,17 +1006,21 @@ export default function Home() {
                 {byokLabel}
               </span>
             )}
-            {/* Cloud sync icon — deliberately hidden on first visit. Appears
-                only after the user has saved at least one listing (so the
-                feature is discoverable, not pushy), or once they're signed
-                in via Google. */}
-            {cloudReady && (hasCloudSaves || (cloudUser && !cloudUser.is_anonymous)) && (
+            {/* Cloud sync — always visible once the backend is wired so users
+                can find sign-in BEFORE their first generation. Subtle icon
+                button: outlined cloud when anonymous (no Google), filled
+                emerald cloud when signed in. Tooltip + aria-label in Arabic. */}
+            {cloudReady && (
               <button
                 type="button"
                 onClick={() => setSyncOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                title="مزامنة عبر الأجهزة"
-                aria-label="مزامنة"
+                title={
+                  cloudUser && !cloudUser.is_anonymous
+                    ? 'مزامن عبر الأجهزة'
+                    : 'احفظ بياناتك عبر الأجهزة'
+                }
+                aria-label="حفظ ومزامنة"
               >
                 {cloudUser && !cloudUser.is_anonymous ? (
                   <Cloud className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
