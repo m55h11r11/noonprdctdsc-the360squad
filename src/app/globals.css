@@ -9,13 +9,23 @@
    The accent ring is a softer warm yellow so focus rings don't scream. */
 
 :root {
+  /* Force the page to render in light mode regardless of the user's OS
+     setting. The Noon brand is warm-light-first; the dark variant of every
+     surface degrades the brand tone. We can layer a real dark theme later
+     when there's product demand for it. */
+  color-scheme: light;
+
   --noon-yellow: #feee00;
   --noon-yellow-600: #f5d800;
   --noon-yellow-200: #fff58a;
+  --noon-yellow-50: #fffdec;
   --noon-ink: #0b0b0d;
   --noon-ink-soft: #1f1f23;
-  --surface: #ffffff;
-  --surface-elev: #fffdf2;        /* warm-tinted card surface, very subtle */
+
+  /* Surface tokens — warm-tinted, never pure white. Cards stack against the
+     ambient page bg and need a tiny lift to feel layered. */
+  --surface: #fffdf2;             /* card body */
+  --surface-elev: #fff8d8;        /* card footer / striped sections */
   --border-soft: rgba(11, 11, 13, 0.07);
   --border-stronger: rgba(11, 11, 13, 0.14);
 
@@ -25,51 +35,42 @@
 
   --ease-emphasis: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+
+  /* Override shadcn's neutral tokens with the Noon-tinted palette. Every
+     shadcn primitive (Card, Dialog, Input, Button, etc.) reads these, so
+     the brand applies automatically without per-component overrides. */
+  --background: #fafaf3;          /* warm off-white page bg, not pure white */
+  --foreground: #0b0b0d;          /* noon-ink */
+  --card: #fffdf2;                /* warm card surface */
+  --card-foreground: #0b0b0d;
+  --popover: #fffdf2;
+  --popover-foreground: #0b0b0d;
+  --primary: #0b0b0d;
+  --primary-foreground: #fffdf2;
+  --secondary: #f4f1e1;           /* warm muted surface for secondary actions */
+  --secondary-foreground: #0b0b0d;
+  --muted: #f5f2e3;
+  --muted-foreground: #5a5547;    /* warm gray, reads on cream */
+  --accent: #fff58a;              /* noon-yellow-200 — used for hover states */
+  --accent-foreground: #0b0b0d;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: rgba(11, 11, 13, 0.09);
+  --input: rgba(11, 11, 13, 0.12);
+  --ring: #f5d800;                /* focus rings are brand yellow, not gray */
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #0f0f12;
-    --surface-elev: #14141a;
-    --border-soft: rgba(255, 255, 255, 0.06);
-    --border-stronger: rgba(255, 255, 255, 0.12);
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.7), 0 6px 18px rgba(0, 0, 0, 0.4);
-  }
+  --radius: 0.75rem;              /* slightly larger — pairs with the brand */
+  --sidebar: #fffdf2;
+  --sidebar-foreground: #0b0b0d;
+  --sidebar-primary: #0b0b0d;
+  --sidebar-primary-foreground: #fffdf2;
+  --sidebar-accent: #fff58a;
+  --sidebar-accent-foreground: #0b0b0d;
+  --sidebar-border: rgba(11, 11, 13, 0.09);
+  --sidebar-ring: #f5d800;
 }
 
 @theme inline {
@@ -155,14 +156,8 @@ body::before {
   animation: ambient-drift 18s var(--ease-soft) infinite alternate;
 }
 
-@media (prefers-color-scheme: dark) {
-  body::before {
-    background:
-      radial-gradient(55% 45% at 8% 4%, color-mix(in oklab, var(--noon-yellow) 11%, transparent) 0%, transparent 60%),
-      radial-gradient(40% 35% at 92% 96%, color-mix(in oklab, var(--noon-yellow) 7%, transparent) 0%, transparent 65%),
-      radial-gradient(35% 30% at 70% 20%, color-mix(in oklab, var(--noon-yellow) 6%, transparent) 0%, transparent 60%);
-  }
-}
+/* (dark-mode override for the gradient is intentionally removed — we lock
+   the page to light via :root color-scheme: light) */
 
 @keyframes ambient-drift {
   0%   { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
@@ -328,39 +323,10 @@ pre::-webkit-scrollbar-thumb:hover {
   outline-offset: 2px;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
+/* shadcn's default `.dark` block intentionally removed — the app is locked
+   to light mode via :root color-scheme: light. If you re-introduce dark
+   mode later, design Noon-brand-aware tokens (warm graphite, mustard
+   accents) rather than the neutral defaults. */
 
 @layer base {
   * {
@@ -371,5 +337,13 @@ pre::-webkit-scrollbar-thumb:hover {
   }
   html {
     @apply font-sans;
+  }
+
+  /* Fix the dashed drop zone in UnifiedInput so its border reads on the
+     warm surface (the default dark:border-zinc-700 stopped applying when
+     we removed dark mode). */
+  .upload-dropzone {
+    border-color: rgba(11, 11, 13, 0.18);
+    background: var(--card);
   }
 }

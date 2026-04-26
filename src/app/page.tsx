@@ -514,10 +514,10 @@ function UnifiedInput({
       }}
       onDragLeave={() => setDrag(false)}
       onDrop={handleDrop}
-      className={`rounded-lg border-2 border-dashed p-3 transition ${
+      className={`rounded-lg border-2 border-dashed p-3 transition-colors ${
         drag
-          ? 'border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-900'
-          : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950'
+          ? 'border-noon-yellow-600 bg-[color:var(--noon-yellow-50)]'
+          : 'border-[color:var(--border-stronger)] bg-card hover:border-[color:var(--noon-yellow-600)]/40'
       } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
     >
       {images.length > 0 && (
