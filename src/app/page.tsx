@@ -560,6 +560,7 @@ function SyncModal({
   onSignOut,
   onDeleteAll,
   signOutPending,
+  oauthError,
 }: {
   user: User | null;
   onClose: () => void;
@@ -567,15 +568,29 @@ function SyncModal({
   onSignOut: () => void;
   onDeleteAll: () => void;
   signOutPending: boolean;
+  oauthError: string | null;
 }) {
   const isSignedIn = !!user && !user.is_anonymous;
   const email = user?.email ?? '';
+
+  // Esc dismiss — match ConfirmDeleteAllModal behavior. Blocked while a
+  // sign-out drain is mid-flight (handlers would re-render against a
+  // half-torn-down session).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !signOutPending) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, signOutPending]);
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${
+        signOutPending ? 'cursor-wait' : ''
+      }`}
       onClick={() => {
         // Block dismiss while sign-out is mid-drain — closing here would
         // leave the modal in an inconsistent state (handlers still firing).
@@ -667,6 +682,14 @@ function SyncModal({
               </svg>
               تسجيل الدخول بحساب Google
             </button>
+            {oauthError && (
+              <p
+                role="alert"
+                className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+              >
+                {oauthError}
+              </p>
+            )}
             <button
               type="button"
               onClick={onDeleteAll}
@@ -692,10 +715,12 @@ function ConfirmDeleteAllModal({
   onConfirm,
   onCancel,
   pending,
+  error,
 }: {
   onConfirm: () => void;
   onCancel: () => void;
   pending: boolean;
+  error: string | null;
 }) {
   // Esc dismisses unless a delete is already in flight (don't let the user
   // close the modal during the network call — they'd lose feedback).
@@ -738,9 +763,17 @@ function ConfirmDeleteAllModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="mb-5 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
           سيتم حذف جميع قوائمك المحفوظة في السحابة نهائيًا. لا يمكن التراجع عن هذا الإجراء.
         </p>
+        {error && (
+          <p
+            role="alert"
+            className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+          >
+            {error}
+          </p>
+        )}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
@@ -782,11 +815,29 @@ export default function Home() {
   // modal stays mounted (showing "جارٍ الحذف…") while the DELETE round-trips.
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  // Surfaced inside ConfirmDeleteAllModal when the DELETE itself fails. Without
+  // this, a 500 from the server gets swallowed and the user sees the modal
+  // close as if the wipe succeeded — but their cloud rows are still there.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // Sign-out runs an async drain of pendingSaves, then signOut, then a fresh
   // signInAnonymously — that can take a noticeable beat on slow networks. We
   // surface it inside SyncModal so the user sees "جارٍ الحفظ ثم الخروج…" instead
   // of a frozen UI. Falls through to the existing modal close once done.
   const [signOutPending, setSignOutPending] = useState(false);
+  // Brief success message shown via aria-live region after silent destructive
+  // / migration actions (delete-all, anon→Google migration). Auto-clears
+  // after 3.5s. Without this the user clicks a destructive button and sees
+  // nothing — the action might as well not have happened from their POV.
+  const [cloudActionToast, setCloudActionToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!cloudActionToast) return;
+    const t = setTimeout(() => setCloudActionToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [cloudActionToast]);
+  // Inline error shown under the Google sign-in button if signInWithOAuth
+  // throws (network down, popup blocked, etc.). Cleared whenever the modal
+  // re-opens — stale errors shouldn't haunt a fresh attempt.
+  const [oauthError, setOauthError] = useState<string | null>(null);
   // Tracks product IDs whose generate() call is in flight. Used to short-
   // circuit double-clicks before React's loading=true state has propagated.
   const inFlight = useRef<Set<string>>(new Set());
@@ -803,6 +854,11 @@ export default function Home() {
   useEffect(() => {
     cloudUserRef.current = cloudUser;
   }, [cloudUser]);
+  // True while sign-out / delete-all are tearing down the session. New saves
+  // started during this window would land under the about-to-be-discarded
+  // user_id (drainPendingSaves only awaits the snapshot it took at start).
+  // We refuse to add them to pendingSaves and skip the cloud POST entirely.
+  const destructiveActive = useRef(false);
 
   // Load BYOK from localStorage on mount.
   useEffect(() => {
@@ -848,24 +904,51 @@ export default function Home() {
 
       // If we just landed back from a Google OAuth redirect AND we stashed
       // an anon user_id before leaving, re-parent the user's anon listings
-      // to the new Google identity. Best-effort: a failure here just means
-      // the orphaned rows stay in the DB (server SQL guard rejects unsafe
-      // re-parents anyway), and the user keeps working with whatever the
-      // listings fetch returns.
+      // to the new Google identity. Best-effort: a failure (e.g. expired
+      // JWT racing the bootstrap) leaves the key in place so the next page
+      // load can retry. The server SQL guard rejects unsafe re-parents.
       try {
         const pendingAnonId = localStorage.getItem(PENDING_ANON_MIGRATE_KEY);
         if (pendingAnonId && user && !user.is_anonymous && pendingAnonId !== user.id) {
-          await fetch('/api/listings/migrate', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ anonUserId: pendingAnonId }),
-          }).catch(() => {
-            /* non-fatal — pending key is cleared regardless */
-          });
+          let migrateRes: Response | null = null;
+          try {
+            migrateRes = await fetch('/api/listings/migrate', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ anonUserId: pendingAnonId }),
+            });
+          } catch {
+            /* network error — leave the key for next bootstrap to retry */
+          }
+          if (migrateRes && migrateRes.ok) {
+            // Clear the key only on confirmed success — a 401 from a stale
+            // JWT or a 503 from cold cloud should NOT eat our retry option.
+            try {
+              localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
+            } catch {
+              /* storage disabled */
+            }
+            try {
+              const payload = (await migrateRes.json()) as { moved?: number };
+              const moved = typeof payload.moved === 'number' ? payload.moved : 0;
+              if (moved > 0) {
+                setCloudActionToast(`تم نقل ${moved} من قوائمك إلى حسابك.`);
+              } else {
+                setCloudActionToast('تم ربط حسابك بنجاح.');
+              }
+            } catch {
+              setCloudActionToast('تم ربط حسابك بنجاح.');
+            }
+          }
+        } else if (pendingAnonId) {
+          // Stale key but no usable session for it — clear so it doesn't
+          // linger across future sign-ins.
+          try {
+            localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
+          } catch {
+            /* storage disabled */
+          }
         }
-        // Always clear the key after attempting migration; we don't retry on
-        // page reload, the moment is gone.
-        if (pendingAnonId) localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
       } catch {
         /* storage disabled — nothing to do */
       }
@@ -1023,7 +1106,19 @@ export default function Home() {
       // saving is a bonus. If it fails we lose a row but the user's session
       // isn't affected. Keeps the "not first on sight" promise: no toast,
       // no loading spinner, no error popup for the save path.
-      if (cloudReady && supabaseConfigured) {
+      //
+      // SKIP CONDITIONS:
+      //   1. destructiveActive — sign-out / delete-all is mid-flight, this
+      //      save would land under a discarded user_id (orphan).
+      //   2. p.fromCloud — the listing was restored from a previous cloud
+      //      row; persisting again would create a duplicate. The schema has
+      //      no UPDATE policy on purpose (we keep history) so we just skip.
+      if (
+        cloudReady &&
+        supabaseConfigured &&
+        !destructiveActive.current &&
+        !p.fromCloud
+      ) {
         const meta = data?.meta ?? {};
         const savePromise = fetch('/api/listings', {
           method: 'POST',
@@ -1061,6 +1156,7 @@ export default function Home() {
   const handleGoogleSignIn = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
+    setOauthError(null);
     // Stash the current anon user_id so the post-redirect bootstrap can
     // re-parent the user's listings from the anon row to the new Google row.
     // Skip if already on a real account (idempotent: covers re-link flows).
@@ -1073,10 +1169,20 @@ export default function Home() {
       }
     }
     const redirectTo = `${window.location.origin}/auth/callback`;
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo },
-    });
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+      });
+      if (error) {
+        setOauthError('تعذّر بدء تسجيل الدخول. تحقّق من الاتصال وحاول مجددًا.');
+      }
+    } catch {
+      // Network failure / popup blocker / browser quirk — surface inline so
+      // the user knows the click did something. Without this the Google
+      // button just sits there looking unclicked.
+      setOauthError('تعذّر بدء تسجيل الدخول. تحقّق من الاتصال وحاول مجددًا.');
+    }
   }, []);
 
   // Wait for in-flight saves to commit, but cap at 3s so a hung fetch on
@@ -1096,6 +1202,7 @@ export default function Home() {
     const supabase = getSupabase();
     if (!supabase) return;
     setSignOutPending(true);
+    destructiveActive.current = true;
     try {
       // Drain pending saves first so rows commit under the outgoing user_id.
       await drainPendingSaves();
@@ -1111,12 +1218,18 @@ export default function Home() {
       } else {
         setCloudUser(data.user ?? null);
       }
-      // Reset visible products — leaving the previous user's listings on
-      // screen under the new anonymous session is dishonest UX.
+    } catch (err) {
+      // signOut() can throw on network failure. Don't strand the user with
+      // stale cloud state — clear local UI either way; refresh recovers.
+      console.warn('[cloud] sign-out failed:', err instanceof Error ? err.message : err);
+    } finally {
+      // Always reset visible products + close modal even if sign-out partially
+      // failed. Leaving the previous user's listings on screen under the new
+      // (anonymous or cleared) session is dishonest UX.
       setProducts([newProduct(1)]);
       setSyncOpen(false);
-    } finally {
       setSignOutPending(false);
+      destructiveActive.current = false;
     }
   }, [drainPendingSaves]);
 
@@ -1124,25 +1237,41 @@ export default function Home() {
   // handleConfirmDeleteAll. Splitting the two means the modal can keep
   // rendering "جارٍ الحذف…" while the network call is in flight.
   const handleDeleteAll = useCallback(() => {
+    // Clear any stale error from a previous failed attempt before reopening.
+    setDeleteError(null);
     setConfirmDeleteOpen(true);
   }, []);
 
   const handleConfirmDeleteAll = useCallback(async () => {
     setDeletePending(true);
+    setDeleteError(null);
+    destructiveActive.current = true;
+    let deleteSucceeded = false;
     try {
       // Drain pending saves so a save that lands AFTER the DELETE doesn't
       // immediately re-create an orphan row under the about-to-be-replaced
       // anonymous user_id.
       await drainPendingSaves();
+      let res: Response | null = null;
       try {
-        await fetch('/api/listings', { method: 'DELETE' });
+        res = await fetch('/api/listings', { method: 'DELETE' });
       } catch {
-        /* non-fatal — user can retry */
+        // Network failure — surface in the modal, don't reset local state
+        // (the cloud rows still exist; lying to the user is worse than
+        // showing the error).
+        setDeleteError('فشل الاتصال. تحقّق من الشبكة وحاول مجددًا.');
+        return;
       }
-      // Reset local state to a clean slate.
-      setProducts([newProduct(1)]);
-      setSyncOpen(false);
-      // Re-sign-in anonymously so the session continues to work.
+      if (!res.ok) {
+        // Server responded but failed — same logic as network failure: keep
+        // the modal open, don't pretend the wipe happened.
+        setDeleteError('تعذّر حذف بياناتك. حاول مجددًا، فإذا استمرّت المشكلة أعد تحميل الصفحة.');
+        return;
+      }
+      deleteSucceeded = true;
+      // Re-sign-in anonymously so the session continues to work. (The DELETE
+      // route also called signOut server-side; the client cookie is now
+      // stale so the next session bootstrap MUST mint a fresh anon user.)
       const supabase = getSupabase();
       if (supabase) {
         const { data, error } = await supabase.auth.signInAnonymously();
@@ -1155,11 +1284,17 @@ export default function Home() {
         }
       }
     } finally {
-      // CRITICAL: clear pending FIRST, then close the modal — otherwise the
-      // modal unmounts while pending=true, and the next open would briefly
-      // flash "جارٍ الحذف…" before the new instance settles.
+      if (deleteSucceeded) {
+        // Reset local UI only on confirmed success.
+        setProducts([newProduct(1)]);
+        setSyncOpen(false);
+        setConfirmDeleteOpen(false);
+        setCloudActionToast('تم حذف بياناتك السحابية.');
+      }
+      // Always clear pending — even on failure the user needs an enabled
+      // dialog to read the error and either retry or cancel.
       setDeletePending(false);
-      setConfirmDeleteOpen(false);
+      destructiveActive.current = false;
     }
   }, [drainPendingSaves]);
 
@@ -1192,6 +1327,21 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      {/* Aria-live toast for post-action confirmation. Fixed-position pill,
+          fades in/out via the timeout in cloudActionToast effect. Uses
+          aria-live="polite" so screen readers announce without hijacking
+          focus. RTL-aware: positioned via inset-x for symmetric centering. */}
+      {cloudActionToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-0 top-4 z-[70] flex justify-center px-4 pointer-events-none"
+        >
+          <div className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+            {cloudActionToast}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
@@ -1472,11 +1622,15 @@ export default function Home() {
       {syncOpen && (
         <SyncModal
           user={cloudUser}
-          onClose={() => setSyncOpen(false)}
+          onClose={() => {
+            setSyncOpen(false);
+            setOauthError(null);
+          }}
           onSignIn={handleGoogleSignIn}
           onSignOut={handleSignOut}
           onDeleteAll={handleDeleteAll}
           signOutPending={signOutPending}
+          oauthError={oauthError}
         />
       )}
 
@@ -1486,9 +1640,13 @@ export default function Home() {
           onCancel={() => {
             // Don't allow dismiss while the destructive call is mid-flight —
             // closing here would leave deletePending stuck true on next open.
-            if (!deletePending) setConfirmDeleteOpen(false);
+            if (!deletePending) {
+              setConfirmDeleteOpen(false);
+              setDeleteError(null);
+            }
           }}
           pending={deletePending}
+          error={deleteError}
         />
       )}
     </div>

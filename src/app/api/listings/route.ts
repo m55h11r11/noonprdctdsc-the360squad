@@ -54,10 +54,10 @@ export async function GET() {
     .limit(LIST_FETCH_LIMIT);
 
   if (error) {
-    return NextResponse.json(
-      { error: 'db_error', message: error.message },
-      { status: 500 },
-    );
+    // Don't echo Supabase error.message to the wire — it can leak DB internals
+    // (column names, search_path quirks, raise() strings). Log server-side.
+    console.warn(`[listings:get] db error for user=${user.id}: ${error.message}`);
+    return NextResponse.json({ error: 'db_error' }, { status: 500 });
   }
 
   // Defensive read: even though POST validates against ListingSchema, rows
@@ -99,10 +99,13 @@ export async function POST(req: NextRequest) {
   }
   const parsed = SaveBodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'invalid_input', issues: parsed.error.issues },
-      { status: 400 },
+    // Don't echo Zod issues to the wire — they enumerate internal field
+    // names (sourceUrls, generationMs, etc.) and constraints. The client
+    // built this body itself, so it doesn't need a granular reason.
+    console.warn(
+      `[listings:post] invalid body for user=${user.id}: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
     );
+    return NextResponse.json({ error: 'invalid_input' }, { status: 400 });
   }
   const d = parsed.data;
 
@@ -123,10 +126,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json(
-      { error: 'db_error', message: error.message },
-      { status: 500 },
-    );
+    console.warn(`[listings:post] db error for user=${user.id}: ${error.message}`);
+    return NextResponse.json({ error: 'db_error' }, { status: 500 });
   }
   return NextResponse.json({ item: data });
 }
@@ -147,10 +148,8 @@ export async function DELETE() {
 
   const { error } = await supabase.from('listings').delete().eq('user_id', user.id);
   if (error) {
-    return NextResponse.json(
-      { error: 'db_error', message: error.message },
-      { status: 500 },
-    );
+    console.warn(`[listings:delete] db error for user=${user.id}: ${error.message}`);
+    return NextResponse.json({ error: 'db_error' }, { status: 500 });
   }
   // Also sign them out so the next session is fresh.
   await supabase.auth.signOut();

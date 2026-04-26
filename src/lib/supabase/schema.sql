@@ -65,7 +65,7 @@ create or replace function migrate_anon_listings(old_user_id uuid)
 returns int
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
 declare
   moved int;
@@ -77,13 +77,25 @@ begin
   if old_user_id = auth.uid() then
     return 0;
   end if;
+  -- Lock the source row FOR UPDATE so concurrent migrate calls serialize
+  -- on it. Without the lock, two callers could both pass the is_anonymous
+  -- check and both attempt the UPDATE — the loser would silently move zero
+  -- rows but we'd have a brief race window where both succeeded the auth
+  -- check on the same anon user.
   select coalesce(is_anonymous, false) into was_anon
-    from auth.users where id = old_user_id;
+    from auth.users where id = old_user_id for update;
   if not coalesce(was_anon, false) then
     raise exception 'source_not_anonymous';
   end if;
   update listings set user_id = auth.uid() where user_id = old_user_id;
   get diagnostics moved = row_count;
+  -- Single-use: delete the source anon user so this UUID cannot be
+  -- re-claimed by anyone else (e.g. shared device, leaked log). The
+  -- ON DELETE CASCADE on listings.user_id is fine because we already
+  -- moved the rows out. Any rows that race in AFTER the UPDATE but
+  -- BEFORE this DELETE would be cascaded — accepted: the user just
+  -- regenerated and the new row landed under the new identity.
+  delete from auth.users where id = old_user_id and is_anonymous = true;
   return moved;
 end;
 $$;

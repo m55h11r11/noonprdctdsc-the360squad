@@ -50,12 +50,11 @@ export async function POST(req: NextRequest) {
   }
   const parsed = GenerateRequestSchema.safeParse(body);
   if (!parsed.success) {
+    // Surface only the first issue's message — full `issues` array enumerates
+    // internal field names and constraints we'd rather not advertise.
+    const firstIssue = parsed.error.issues[0]?.message ?? 'Input failed validation.';
     return NextResponse.json(
-      {
-        error: 'invalid_input',
-        message: 'Input failed validation.',
-        issues: parsed.error.issues,
-      },
+      { error: 'invalid_input', message: firstIssue },
       { status: 400 },
     );
   }
