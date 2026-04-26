@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
 const geistSans = Geist({
@@ -37,8 +39,23 @@ export default function RootLayout({
       dir="rtl"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-        {children}
+      <body className="min-h-full bg-background text-foreground">
+        <TooltipProvider delayDuration={120}>
+          {children}
+          <Toaster
+            position="top-center"
+            dir="rtl"
+            richColors
+            closeButton
+            toastOptions={{
+              classNames: {
+                toast:
+                  'rounded-2xl border border-[color:var(--border-stronger)] bg-[color:var(--surface)] shadow-2xl',
+                description: 'text-zinc-600 dark:text-zinc-400',
+              },
+            }}
+          />
+        </TooltipProvider>
         <Analytics />
       </body>
     </html>
