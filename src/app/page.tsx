@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { fileToResizedDataUrl } from '@/lib/image';
 import { downloadCsv, productsToCsv, type ProductRow } from '@/lib/csv';
-import type { Listing } from '@/lib/schema';
+import { ListingSchema, type Listing } from '@/lib/schema';
 import { getSupabase, supabaseConfigured } from '@/lib/supabase/client';
 import { RESTORE_RECENT_COUNT } from '@/lib/config';
 import type { User } from '@supabase/supabase-js';
@@ -762,27 +762,39 @@ export default function Home() {
         const res = await fetch('/api/listings');
         if (!res.ok) return;
         const payload = await res.json();
+        // result is typed as `unknown` deliberately — the API filters bad
+        // rows but we don't trust the wire blindly (cached responses, future
+        // schema drift, etc.). Validate at use site via flatMap so any row
+        // that fails just gets dropped instead of crashing the page.
         const items: Array<{
           id: number;
           name: string;
           source_urls: string[];
           note: string | null;
-          result: Listing;
+          result: unknown;
         }> = payload.items ?? [];
         if (items.length > 0 && !cancelled) {
-          setHasCloudSaves(true);
-          const restored: ProductState[] = items.slice(0, RESTORE_RECENT_COUNT).map((it) => ({
-            id: uid(),
-            name: it.name,
-            text: (it.source_urls ?? []).join('\n'),
-            note: it.note ?? '',
-            images: [], // images aren't persisted server-side; see README design note
-            result: it.result,
-            loading: false,
-            error: null,
-          }));
-          // Restored cards first, then a blank one so the user can keep going.
-          setProducts([...restored, newProduct(restored.length + 1)]);
+          const restored: ProductState[] = items
+            .slice(0, RESTORE_RECENT_COUNT)
+            .flatMap((it) => {
+              const parsed = ListingSchema.safeParse(it.result);
+              if (!parsed.success) return [];
+              return [{
+                id: uid(),
+                name: it.name,
+                text: (it.source_urls ?? []).join('\n'),
+                note: it.note ?? '',
+                images: [], // images aren't persisted server-side; see README design note
+                result: parsed.data,
+                loading: false,
+                error: null,
+              } satisfies ProductState];
+            });
+          if (restored.length > 0) {
+            setHasCloudSaves(true);
+            // Restored cards first, then a blank one so the user can keep going.
+            setProducts([...restored, newProduct(restored.length + 1)]);
+          }
         }
       } catch {
         /* non-fatal — user keeps working locally */

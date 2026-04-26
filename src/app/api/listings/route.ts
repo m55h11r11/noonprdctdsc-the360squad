@@ -59,7 +59,24 @@ export async function GET() {
       { status: 500 },
     );
   }
-  return NextResponse.json({ items: data ?? [] });
+
+  // Defensive read: even though POST validates against ListingSchema, rows
+  // can drift out of shape — schema evolution, manual DB inserts, future
+  // migrations. Filter out malformed rows here so one bad row can't crash
+  // the client when it dereferences result.ar.title etc. Log skipped rows
+  // so the owner notices and can clean them up.
+  const rows = data ?? [];
+  const items = rows.filter((row) => {
+    const parsed = ListingSchema.safeParse(row.result);
+    if (!parsed.success) {
+      console.warn(
+        `[listings:get] skipping malformed row id=${row.id} user=${user.id}: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
+      );
+      return false;
+    }
+    return true;
+  });
+  return NextResponse.json({ items });
 }
 
 export async function POST(req: NextRequest) {
