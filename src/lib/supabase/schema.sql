@@ -47,6 +47,45 @@ create policy "delete own listings"
 -- rather than mutating an old one. This preserves history for data analysis
 -- ("did the user retry 3 times with different notes?").
 
+-- ─── Anonymous → authenticated migration ─────────────────────────────────────
+-- Re-parent listings created under an anonymous session to the new authenticated
+-- user. Without this, anon listings stay orphaned under the dead anon user_id
+-- (invisible under RLS) when the user signs in with Google.
+--
+-- Runs as `security definer` because RLS would otherwise block the UPDATE
+-- (auth.uid() no longer matches the old user_id). Guarded so it only moves
+-- rows whose source owner was an anonymous user — prevents one authenticated
+-- user from claiming another's listings by passing in their UUID.
+create or replace function migrate_anon_listings(old_user_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  moved int;
+  was_anon boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+  if old_user_id = auth.uid() then
+    return 0;
+  end if;
+  select coalesce(is_anonymous, false) into was_anon
+    from auth.users where id = old_user_id;
+  if not coalesce(was_anon, false) then
+    raise exception 'source_not_anonymous';
+  end if;
+  update listings set user_id = auth.uid() where user_id = old_user_id;
+  get diagnostics moved = row_count;
+  return moved;
+end;
+$$;
+
+revoke all on function migrate_anon_listings(uuid) from public;
+grant execute on function migrate_anon_listings(uuid) to authenticated;
+
 -- ─── Useful analytics queries (for the owner, run ad-hoc) ────────────────────
 -- Top providers used:
 --   select provider, count(*) from listings group by provider order by 2 desc;

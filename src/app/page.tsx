@@ -30,6 +30,7 @@ import {
 import { fileToResizedDataUrl } from '@/lib/image';
 import { downloadCsv, productsToCsv, type ProductRow } from '@/lib/csv';
 import { ListingSchema, type Listing } from '@/lib/schema';
+import { BYOK_PROVIDERS, PROVIDER_META } from '@/lib/providers-meta';
 import { getSupabase, supabaseConfigured } from '@/lib/supabase/client';
 import { RESTORE_RECENT_COUNT } from '@/lib/config';
 import type { Session, User } from '@supabase/supabase-js';
@@ -56,67 +57,37 @@ interface ProductState {
   text: string; // textarea content — URLs pasted in free-form
   note: string;
   images: string[]; // resized JPEG data URLs
+  fromCloud?: boolean; // true if restored from Supabase; images were not persisted server-side
   result: Listing | null;
   loading: boolean;
   error: string | null;
 }
 
-// Keep this list in sync with src/lib/providers.ts PROVIDER_META.
-// Duplicated here so the client doesn't need to import server-only deps.
+// Derived from the single source of truth in src/lib/providers-meta.ts.
+// Order is preserved by iterating BYOK_PROVIDERS (a const tuple).
 const PROVIDER_OPTIONS: Array<{
   id: ByokProvider;
   label: string;
   defaultModel: string;
   keysUrl: string;
   hint: string;
-}> = [
-  {
-    id: 'anthropic',
-    label: 'Anthropic (Claude)',
-    defaultModel: 'claude-haiku-4-5',
-    keysUrl: 'https://console.anthropic.com/settings/keys',
-    hint: 'sk-ant-...',
-  },
-  {
-    id: 'google',
-    label: 'Google (Gemini)',
-    defaultModel: 'gemini-2.5-flash',
-    keysUrl: 'https://aistudio.google.com/app/apikey',
-    hint: 'AIza...',
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI (GPT)',
-    defaultModel: 'gpt-4o-mini',
-    keysUrl: 'https://platform.openai.com/api-keys',
-    hint: 'sk-...',
-  },
-  {
-    id: 'groq',
-    label: 'Groq (Llama / Mixtral)',
-    defaultModel: 'llama-3.3-70b-versatile',
-    keysUrl: 'https://console.groq.com/keys',
-    hint: 'gsk_...',
-  },
-  {
-    id: 'mistral',
-    label: 'Mistral',
-    defaultModel: 'mistral-small-latest',
-    keysUrl: 'https://console.mistral.ai/api-keys',
-    hint: '...',
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter (any model)',
-    defaultModel: 'anthropic/claude-haiku-4-5',
-    keysUrl: 'https://openrouter.ai/keys',
-    hint: 'sk-or-...',
-  },
-];
+}> = BYOK_PROVIDERS.map((id) => ({
+  id,
+  label: PROVIDER_META[id].label,
+  defaultModel: PROVIDER_META[id].defaultModel,
+  keysUrl: PROVIDER_META[id].docsUrl,
+  hint: PROVIDER_META[id].keyHint,
+}));
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const BYOK_STORAGE_KEY = 'noon-desc.byok.v2'; // v2: added optional `model`
+// Stashed across the Google OAuth redirect so the bootstrap effect on the
+// post-callback page knows which anon user_id to re-parent listings from.
+// localStorage (not sessionStorage) because some browsers clear sessionStorage
+// during cross-origin redirects; localStorage survives. We delete the value
+// the moment migration completes (or fails), so it never lingers.
+const PENDING_ANON_MIGRATE_KEY = 'noon-desc.migrate.anon-id';
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -699,6 +670,89 @@ function SyncModal({
   );
 }
 
+// ─── Confirm-delete-all modal ───────────────────────────────────────────────
+// Replaces window.confirm() — the native dialog uses the browser's locale (so
+// it appears in English buttons / non-RTL on most machines), can't be styled,
+// and feels glaringly out of place in this Arabic-first app. Matches SyncModal
+// visually so the destructive moment doesn't feel jarring.
+
+function ConfirmDeleteAllModal({
+  onConfirm,
+  onCancel,
+  pending,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  pending: boolean;
+}) {
+  // Esc dismisses unless a delete is already in flight (don't let the user
+  // close the modal during the network call — they'd lose feedback).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !pending) onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel, pending]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-delete-title"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      onClick={() => {
+        if (!pending) onCancel();
+      }}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2
+            id="confirm-delete-title"
+            className="text-base font-semibold text-red-600 dark:text-red-400"
+          >
+            حذف جميع بياناتي؟
+          </h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            className="rounded p-1 text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800"
+            aria-label="إغلاق"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mb-5 text-sm text-zinc-600 dark:text-zinc-400">
+          سيتم حذف جميع قوائمك المحفوظة في السحابة نهائيًا. لا يمكن التراجع عن هذا الإجراء.
+        </p>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            className="inline-flex items-center justify-center rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className="inline-flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 dark:bg-red-600 dark:hover:bg-red-500"
+          >
+            <Trash2 className="h-4 w-4" />
+            {pending ? 'جارٍ الحذف…' : 'نعم، احذف كل شيء'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -712,9 +766,26 @@ export default function Home() {
   const [cloudUser, setCloudUser] = useState<User | null>(null);
   const [cloudReady, setCloudReady] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+  // ConfirmDeleteAllModal visibility. Separate from `deletePending` because the
+  // modal stays mounted (showing "جارٍ الحذف…") while the DELETE round-trips.
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   // Tracks product IDs whose generate() call is in flight. Used to short-
   // circuit double-clicks before React's loading=true state has propagated.
   const inFlight = useRef<Set<string>>(new Set());
+  // Tracks fire-and-forget POST /api/listings promises so handleSignOut can
+  // drain them before discarding the current user_id. Without this, a row
+  // saved while sign-out is in progress lands under the about-to-be-discarded
+  // anonymous user_id and becomes orphaned (invisible under RLS).
+  const pendingSaves = useRef<Set<Promise<unknown>>>(new Set());
+  // Latest cloudUser exposed to the onAuthStateChange handler — that handler
+  // is registered in a `[]`-deps effect so it captures the initial null. The
+  // ref lets the handler detect "previous session was anonymous" without
+  // re-subscribing on every cloudUser change.
+  const cloudUserRef = useRef<User | null>(null);
+  useEffect(() => {
+    cloudUserRef.current = cloudUser;
+  }, [cloudUser]);
 
   // Load BYOK from localStorage on mount.
   useEffect(() => {
@@ -758,6 +829,30 @@ export default function Home() {
       setCloudUser(user);
       setCloudReady(true);
 
+      // If we just landed back from a Google OAuth redirect AND we stashed
+      // an anon user_id before leaving, re-parent the user's anon listings
+      // to the new Google identity. Best-effort: a failure here just means
+      // the orphaned rows stay in the DB (server SQL guard rejects unsafe
+      // re-parents anyway), and the user keeps working with whatever the
+      // listings fetch returns.
+      try {
+        const pendingAnonId = localStorage.getItem(PENDING_ANON_MIGRATE_KEY);
+        if (pendingAnonId && user && !user.is_anonymous && pendingAnonId !== user.id) {
+          await fetch('/api/listings/migrate', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ anonUserId: pendingAnonId }),
+          }).catch(() => {
+            /* non-fatal — pending key is cleared regardless */
+          });
+        }
+        // Always clear the key after attempting migration; we don't retry on
+        // page reload, the moment is gone.
+        if (pendingAnonId) localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
+      } catch {
+        /* storage disabled — nothing to do */
+      }
+
       // Pull recent listings to decide whether to show the ☁️ button and
       // whether to restore past work into the UI.
       try {
@@ -787,6 +882,7 @@ export default function Home() {
                 text: (it.source_urls ?? []).join('\n'),
                 note: it.note ?? '',
                 images: [], // images aren't persisted server-side; see README design note
+                fromCloud: true,
                 result: parsed.data,
                 loading: false,
                 error: null,
@@ -912,7 +1008,7 @@ export default function Home() {
       // no loading spinner, no error popup for the save path.
       if (cloudReady && supabaseConfigured) {
         const meta = data?.meta ?? {};
-        fetch('/api/listings', {
+        const savePromise = fetch('/api/listings', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -927,6 +1023,11 @@ export default function Home() {
           }),
         }).catch(() => {
           /* non-fatal */
+        });
+        // Track so handleSignOut can drain before discarding user_id.
+        pendingSaves.current.add(savePromise);
+        savePromise.finally(() => {
+          pendingSaves.current.delete(savePromise);
         });
       }
     } catch (err) {
@@ -943,6 +1044,17 @@ export default function Home() {
   const handleGoogleSignIn = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
+    // Stash the current anon user_id so the post-redirect bootstrap can
+    // re-parent the user's listings from the anon row to the new Google row.
+    // Skip if already on a real account (idempotent: covers re-link flows).
+    const current = cloudUserRef.current;
+    if (current?.is_anonymous) {
+      try {
+        localStorage.setItem(PENDING_ANON_MIGRATE_KEY, current.id);
+      } catch {
+        /* storage disabled — migration won't run, but sign-in still works */
+      }
+    }
     const redirectTo = `${window.location.origin}/auth/callback`;
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -953,6 +1065,12 @@ export default function Home() {
   const handleSignOut = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
+    // Drain in-flight saves so rows commit under the outgoing user_id, not
+    // get orphaned when the session is discarded. Worst case the user waits
+    // a fraction of a second before sign-out completes.
+    if (pendingSaves.current.size > 0) {
+      await Promise.allSettled(Array.from(pendingSaves.current));
+    }
     await supabase.auth.signOut();
     // After sign-out, bootstrap a fresh anonymous session so the app stays usable.
     const { data } = await supabase.auth.signInAnonymously();
@@ -964,11 +1082,15 @@ export default function Home() {
     setSyncOpen(false);
   }, []);
 
-  const handleDeleteAll = useCallback(async () => {
-    const ok = window.confirm(
-      'هل أنت متأكد؟ سيتم حذف جميع قوائمك المحفوظة. لا يمكن التراجع عن هذا الإجراء.',
-    );
-    if (!ok) return;
+  // Open the confirm modal. The actual destructive call is in
+  // handleConfirmDeleteAll. Splitting the two means the modal can keep
+  // rendering "جارٍ الحذف…" while the network call is in flight.
+  const handleDeleteAll = useCallback(() => {
+    setConfirmDeleteOpen(true);
+  }, []);
+
+  const handleConfirmDeleteAll = useCallback(async () => {
+    setDeletePending(true);
     try {
       await fetch('/api/listings', { method: 'DELETE' });
     } catch {
@@ -977,12 +1099,14 @@ export default function Home() {
     // Reset local state to a clean slate.
     setProducts([newProduct(1)]);
     setSyncOpen(false);
+    setConfirmDeleteOpen(false);
     // Re-sign-in anonymously so the session continues to work.
     const supabase = getSupabase();
     if (supabase) {
       const { data } = await supabase.auth.signInAnonymously();
       setCloudUser(data.user ?? null);
     }
+    setDeletePending(false);
   }, []);
 
   const generateAll = async () => {
@@ -1151,6 +1275,11 @@ export default function Home() {
                   className="flex-1 bg-transparent text-sm font-semibold outline-none"
                   aria-label="اسم المنتج"
                 />
+                {p.fromCloud && p.images.length === 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                    مُستعادة — أضف صورًا قبل إعادة الإنشاء
+                  </span>
+                )}
                 {products.length > 1 && (
                   <button
                     type="button"
@@ -1270,6 +1399,12 @@ export default function Home() {
           </button>
         </div>
 
+        {cloudReady && cloudUser?.is_anonymous && completedCount >= 1 && (
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+            بياناتك محفوظة محليًا فقط — اضغط <Cloud className="inline h-3 w-3 align-[-1px]" /> للمزامنة عبر الأجهزة.
+          </p>
+        )}
+
         <footer className="mt-10 text-center text-xs text-zinc-500">
           يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا.{' '}
           <span className="ltr">Bring-your-own-key · by The360Squad</span>
@@ -1287,6 +1422,18 @@ export default function Home() {
           onSignIn={handleGoogleSignIn}
           onSignOut={handleSignOut}
           onDeleteAll={handleDeleteAll}
+        />
+      )}
+
+      {confirmDeleteOpen && (
+        <ConfirmDeleteAllModal
+          onConfirm={handleConfirmDeleteAll}
+          onCancel={() => {
+            // Don't allow dismiss while the destructive call is mid-flight —
+            // closing here would leave deletePending stuck true on next open.
+            if (!deletePending) setConfirmDeleteOpen(false);
+          }}
+          pending={deletePending}
         />
       )}
     </div>
