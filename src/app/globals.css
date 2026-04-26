@@ -1,27 +1,65 @@
 @import "tailwindcss";
 
+/* ─── Brand tokens ────────────────────────────────────────────────────────── */
+/* Noon's signature lemon-yellow plus a darker variant for hover/active states.
+   The accent ring is a softer warm yellow so focus rings don't scream. */
+
 :root {
-  --background: #fafafa;
-  --foreground: #18181b;
+  --noon-yellow: #feee00;
+  --noon-yellow-600: #f5d800;
+  --noon-yellow-200: #fff58a;
+  --noon-ink: #0b0b0d;
+  --noon-ink-soft: #1f1f23;
+
+  --background: #fafaf7;
+  --foreground: var(--noon-ink);
+  --surface: #ffffff;
+  --surface-elev: #fffdf2;        /* warm-tinted card surface, very subtle */
+  --border-soft: rgba(11, 11, 13, 0.07);
+  --border-stronger: rgba(11, 11, 13, 0.14);
+
+  --shadow-sm: 0 1px 2px rgba(11, 11, 13, 0.04);
+  --shadow-md: 0 6px 20px -8px rgba(11, 11, 13, 0.10), 0 2px 4px rgba(11, 11, 13, 0.04);
+  --shadow-lg: 0 18px 40px -12px rgba(11, 11, 13, 0.18), 0 6px 14px rgba(11, 11, 13, 0.05);
+
+  --ease-emphasis: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #07070a;
+    --foreground: #f5f5f1;
+    --surface: #0f0f12;
+    --surface-elev: #14141a;
+    --border-soft: rgba(255, 255, 255, 0.06);
+    --border-stronger: rgba(255, 255, 255, 0.12);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.7), 0 6px 18px rgba(0, 0, 0, 0.4);
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-noon-yellow: var(--noon-yellow);
+  --color-noon-yellow-600: var(--noon-yellow-600);
+  --color-noon-yellow-200: var(--noon-yellow-200);
+  --color-noon-ink: var(--noon-ink);
+  --color-surface: var(--surface);
+  --color-surface-elev: var(--surface-elev);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-  }
-}
+/* ─── Body + ambient backdrop ─────────────────────────────────────────────── */
+/* Two layered radial gradients give a warm, branded backdrop that drifts very
+   slowly. This is the "emotional" layer the user asked for: subtle enough not
+   to compete with content, present enough to feel alive. The animation
+   respects prefers-reduced-motion. */
 
-/* The whole app is Arabic-first (dir="rtl" on <html>). Pick an Arabic-capable
- * font stack as the default body font. Geist stays available for Latin runs
- * via mono/sans CSS vars, but the default body is readable in Arabic. */
 body {
   background: var(--background);
   color: var(--foreground);
@@ -32,26 +70,130 @@ body {
     var(--font-geist-sans),
     system-ui,
     sans-serif;
+  font-feature-settings: "kern", "liga", "calt";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 12% 8%, color-mix(in oklab, var(--noon-yellow) 22%, transparent) 0%, transparent 60%),
+    radial-gradient(45% 40% at 88% 92%, color-mix(in oklab, var(--noon-yellow-200) 18%, transparent) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: -1;
+  animation: ambient-drift 24s var(--ease-soft) infinite alternate;
+}
+
+@media (prefers-color-scheme: dark) {
+  body::before {
+    background:
+      radial-gradient(60% 50% at 12% 8%, color-mix(in oklab, var(--noon-yellow) 8%, transparent) 0%, transparent 60%),
+      radial-gradient(45% 40% at 88% 92%, color-mix(in oklab, var(--noon-yellow) 5%, transparent) 0%, transparent 65%);
+  }
+}
+
+@keyframes ambient-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-1.5%, 1%, 0) scale(1.02); }
+  100% { transform: translate3d(1%, -1%, 0) scale(1.01); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ─── RTL / LTR utilities ─────────────────────────────────────────────────── */
 /* Individual code blocks flip direction based on their content language.
  * Wrap Arabic code blocks in `.rtl`; wrap English code blocks in `.ltr`.
  * The defaults inherit from <html dir="rtl">. */
-.ltr {
-  direction: ltr;
-  text-align: left;
-}
-.rtl {
-  direction: rtl;
-  text-align: right;
+
+.ltr { direction: ltr; text-align: left; }
+.rtl { direction: rtl; text-align: right; }
+
+/* ─── Surface + card helpers ──────────────────────────────────────────────── */
+/* Centralized so card hover behavior stays consistent across the app. */
+
+.card-surface {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow 220ms var(--ease-emphasis),
+    transform 220ms var(--ease-emphasis),
+    border-color 220ms var(--ease-soft);
 }
 
-/* Scrollbar polish inside code blocks. */
-pre::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
+.card-surface:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-stronger);
+  transform: translateY(-1px);
 }
+
+/* ─── Brand button ────────────────────────────────────────────────────────── */
+/* Bright Noon yellow with a darker hover and a satisfying press scale. */
+
+.btn-noon {
+  background: linear-gradient(180deg, var(--noon-yellow) 0%, var(--noon-yellow-600) 100%);
+  color: var(--noon-ink);
+  border: 1px solid color-mix(in oklab, var(--noon-yellow-600) 60%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(11, 11, 13, 0.1);
+  transition:
+    transform 120ms var(--ease-emphasis),
+    box-shadow 200ms var(--ease-soft),
+    filter 200ms var(--ease-soft);
+}
+.btn-noon:hover { filter: brightness(1.04); box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 12px -2px rgba(254, 238, 0, 0.45); }
+.btn-noon:active { transform: scale(0.97); }
+.btn-noon:focus-visible {
+  outline: 2px solid var(--noon-ink);
+  outline-offset: 2px;
+}
+
+/* ─── Scrollbar polish ────────────────────────────────────────────────────── */
+
+pre::-webkit-scrollbar { height: 8px; width: 8px; }
 pre::-webkit-scrollbar-thumb {
   background: rgba(127, 127, 127, 0.3);
   border-radius: 4px;
+}
+pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(127, 127, 127, 0.5);
+}
+
+/* ─── Skeleton shimmer ────────────────────────────────────────────────────── */
+/* Used inside .skeleton elements while cloud restore is in flight. */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--foreground) 6%, transparent) 0%,
+    color-mix(in oklab, var(--foreground) 12%, transparent) 50%,
+    color-mix(in oklab, var(--foreground) 6%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s var(--ease-soft) infinite;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ─── Focus ring (accessibility) ──────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--noon-yellow-600) 80%, var(--noon-ink) 20%);
+  outline-offset: 2px;
 }

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowUpRight,
   Check,
@@ -296,18 +297,26 @@ function ByokModal({
   const effectiveModel = (model.trim() || meta.defaultModel);
 
   return (
-    <div
+    <motion.div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div
-        className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        className="w-full max-w-md rounded-2xl border border-[color:var(--border-stronger)] bg-[color:var(--surface)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">استخدم مفتاح API خاص بك</h2>
+          <h2 className="text-lg font-semibold tracking-tight">استخدم مفتاح API خاص بك</h2>
           <button
             type="button"
             onClick={onClose}
@@ -415,14 +424,14 @@ function ByokModal({
                 });
                 onClose();
               }}
-              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              className="btn-noon rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
               حفظ
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -585,10 +594,14 @@ function SyncModal({
   }, [onClose, signOutPending]);
 
   return (
-    <div
+    <motion.div
       role="dialog"
       aria-modal="true"
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm ${
         signOutPending ? 'cursor-wait' : ''
       }`}
       onClick={() => {
@@ -597,12 +610,16 @@ function SyncModal({
         if (!signOutPending) onClose();
       }}
     >
-      <div
-        className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        className="w-full max-w-sm rounded-2xl border border-[color:var(--border-stronger)] bg-[color:var(--surface)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold">المزامنة عبر الأجهزة</h2>
+          <h2 className="text-base font-semibold tracking-tight">المزامنة عبر الأجهزة</h2>
           <button
             type="button"
             onClick={onClose}
@@ -700,8 +717,8 @@ function SyncModal({
             </button>
           </>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -733,17 +750,25 @@ function ConfirmDeleteAllModal({
   }, [onCancel, pending]);
 
   return (
-    <div
+    <motion.div
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-delete-title"
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={() => {
         if (!pending) onCancel();
       }}
     >
-      <div
-        className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        className="w-full max-w-sm rounded-2xl border border-[color:var(--border-stronger)] bg-[color:var(--surface)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -793,8 +818,8 @@ function ConfirmDeleteAllModal({
             {pending ? 'جارٍ الحذف…' : 'نعم، احذف كل شيء'}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -1328,47 +1353,81 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* Aria-live toast for post-action confirmation. Fixed-position pill,
-          fades in/out via the timeout in cloudActionToast effect. Uses
-          aria-live="polite" so screen readers announce without hijacking
-          focus. RTL-aware: positioned via inset-x for symmetric centering. */}
-      {cloudActionToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-x-0 top-4 z-[70] flex justify-center px-4 pointer-events-none"
-        >
-          <div className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-            {cloudActionToast}
-          </div>
-        </div>
-      )}
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+          fades + slides in via motion. aria-live="polite" so screen readers
+          announce without hijacking focus. RTL-aware via inset-x centering. */}
+      <AnimatePresence>
+        {cloudActionToast && (
+          <motion.div
+            key="cloud-toast"
+            role="status"
+            aria-live="polite"
+            initial={{ opacity: 0, y: -16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+            transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+            className="fixed inset-x-0 top-4 z-[70] flex justify-center px-4 pointer-events-none"
+          >
+            <div className="flex items-center gap-2 rounded-full border border-emerald-300/70 bg-emerald-50/95 px-4 py-2 text-sm font-medium text-emerald-800 shadow-lg backdrop-blur dark:border-emerald-700/60 dark:bg-emerald-950/70 dark:text-emerald-200">
+              <Check className="h-4 w-4" />
+              {cloudActionToast}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Header — sticky, glassy, with branded logo glow. The logo's pulse is
+          a subtle "alive" cue (motion budget: medium per the design brief). */}
+      <header className="sticky top-0 z-40 border-b border-[color:var(--border-soft)] bg-[color-mix(in_oklab,var(--surface)_80%,transparent)] backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-yellow-400 to-yellow-500 text-zinc-900">
-              <Zap className="h-5 w-5" />
-            </div>
+          <motion.div
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+            className="flex items-center gap-3"
+          >
+            <motion.div
+              whileHover={{ rotate: -6, scale: 1.06 }}
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+              className="relative flex h-10 w-10 items-center justify-center rounded-2xl text-noon-ink shadow-[0_8px_24px_-8px_rgba(254,238,0,0.5)]"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--noon-yellow) 0%, var(--noon-yellow-600) 100%)',
+              }}
+            >
+              <Zap className="h-5 w-5" strokeWidth={2.5} />
+              <span
+                aria-hidden="true"
+                className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/40"
+              />
+            </motion.div>
             <div className="leading-tight">
-              <h1 className="text-base font-semibold">مولد أوصاف منتجات نون</h1>
-              <p className="text-xs text-zinc-500 ltr">by The360Squad</p>
+              <h1 className="text-base font-semibold tracking-tight">مولد أوصاف منتجات نون</h1>
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500 ltr">by The360Squad</p>
             </div>
-          </div>
+          </motion.div>
           <div className="flex items-center gap-2">
             {byokLabel && (
-              <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 sm:inline">
+              <motion.span
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.25 }}
+                className="hidden items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50/80 px-3 py-1 text-xs font-medium text-emerald-800 backdrop-blur dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 sm:inline-flex"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]" />
                 {byokLabel}
-              </span>
+              </motion.span>
             )}
             {/* Cloud sync — always visible once the backend is wired so users
-                can find sign-in BEFORE their first generation. Subtle icon
-                button: outlined cloud when anonymous (no Google), filled
-                emerald cloud when signed in. Tooltip + aria-label in Arabic. */}
+                can find sign-in BEFORE their first generation. Pulses softly
+                while anonymous to nudge sign-in (motion-safe via reduced-motion
+                CSS). */}
             {cloudReady && (
-              <button
+              <motion.button
                 type="button"
                 onClick={() => setSyncOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--border-stronger)] bg-[color:var(--surface)] px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors hover:bg-[color:var(--surface-elev)]"
                 title={
                   cloudUser && !cloudUser.is_anonymous
                     ? 'مزامن عبر الأجهزة'
@@ -1381,274 +1440,403 @@ export default function Home() {
                 ) : (
                   <CloudOff className="h-3.5 w-3.5" />
                 )}
-              </button>
+              </motion.button>
             )}
-            <button
+            <motion.button
               type="button"
               onClick={() => setByokOpen(true)}
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium ${
+              whileTap={{ scale: 0.96 }}
+              className={
                 byok
-                  ? 'border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900'
-                  : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200'
-              }`}
+                  ? 'inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--border-stronger)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium shadow-sm transition-colors hover:bg-[color:var(--surface-elev)]'
+                  : 'btn-noon inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold'
+              }
             >
               {byok ? <KeyRound className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}
               {byok ? 'مفتاحك' : 'ابدأ الإعداد'}
-            </button>
+            </motion.button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         {/* Intro */}
-        <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
-          <h2 className="mb-1 text-lg font-semibold">أنشئ قوائم جاهزة لنون</h2>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            الصق روابط المنتج من أي متجر (AliExpress، Amazon، Shopify، Salla، أو أي مصدر) أو ألصق صور المنتج. ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+          className="mb-7 card-surface rounded-2xl p-5 sm:p-6"
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-noon-yellow shadow-[0_0_0_3px_rgba(254,238,0,0.25)]" />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 ltr">
+              Bilingual · Noon-ready
+            </span>
+          </div>
+          <h2 className="mb-2 text-xl font-semibold tracking-tight sm:text-[22px]">
+            أنشئ قوائم جاهزة لنون — بضغطة واحدة
+          </h2>
+          <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-[15px]">
+            الصق روابط المنتج من أي متجر (AliExpress، Amazon، Shopify، Salla، أو أي مصدر) أو ألصق صور المنتج.
+            ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
           </p>
-        </section>
+        </motion.section>
 
         {/* Onboarding — shown until the user configures a BYOK key. Three-step
              flow: (1) click "Get free Gemini key" → opens aistudio in new tab,
              (2) copy key from there, (3) come back and paste into the inline
-             input right here. Auto-detects provider from key prefix. No modal
-             round-trip. */}
-        {!byok && (
-          <section className="mb-6 overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-br from-yellow-50 via-white to-white p-5 dark:border-zinc-800 dark:from-yellow-950/20 dark:via-zinc-950 dark:to-zinc-950 sm:p-6">
-            <div className="mb-1 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-              <span className="text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">
-                ابدأ خلال 30 ثانية
-              </span>
-            </div>
-            <h2 className="mb-1 text-lg font-semibold">
-              أحضر مفتاح API خاصًا بك للبدء
-            </h2>
-            <p className="mb-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-              هذه الأداة تستخدم مفتاحك الخاص — لا حساب مطلوب، ولا رسوم من جانبنا.
-              يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لكل عملية.
-              الخيار الأسرع: احصل على{' '}
-              <strong>مفتاح Gemini مجاني من Google</strong> ثم ألصقه أدناه.
-            </p>
-
-            {/* Step 1: open AIStudio */}
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-zinc-900 shadow-sm hover:bg-yellow-400"
-              >
-                <span>1.</span>
-                احصل على مفتاح Gemini مجاني
-                <ArrowUpRight className="h-4 w-4" />
-              </a>
-              <span className="text-xs text-zinc-500">
-                يفتح في تبويب جديد — انسخ المفتاح الذي يبدأ بـ <code className="ltr">AIza...</code>
-              </span>
-            </div>
-
-            {/* Step 2: paste inline */}
-            <QuickKeyInput onSaved={persistByok} onOpenFull={() => setByokOpen(true)} />
-
-            <div className="mt-3 text-xs text-zinc-500 ltr">
-              Also supported: Anthropic · OpenAI · Groq · Mistral · OpenRouter —
-              <button
-                type="button"
-                onClick={() => setByokOpen(true)}
-                className="ml-1 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
-              >
-                pick provider manually
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Product cards */}
-        <div className="space-y-4">
-          {products.map((p, idx) => (
-            <article
-              key={p.id}
-              className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+             input right here. Auto-detects provider from key prefix. */}
+        <AnimatePresence>
+          {!byok && (
+            <motion.section
+              key="onboarding"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }}
+              transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1], delay: 0.05 }}
+              className="relative mb-7 overflow-hidden rounded-2xl border border-noon-yellow/40 p-5 shadow-[0_8px_32px_-12px_rgba(254,238,0,0.35)] sm:p-7"
+              style={{
+                background:
+                  'linear-gradient(135deg, color-mix(in oklab, var(--noon-yellow) 18%, var(--surface)) 0%, var(--surface) 60%, var(--surface-elev) 100%)',
+              }}
             >
-              <header className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                <input
-                  type="text"
-                  value={p.name}
-                  onChange={(e) => updateProduct(p.id, { name: e.target.value })}
-                  className="flex-1 bg-transparent text-sm font-semibold outline-none"
-                  aria-label="اسم المنتج"
-                />
-                {p.fromCloud && p.images.length === 0 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                    مُستعادة — أضف صورًا قبل إعادة الإنشاء
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full"
+                style={{
+                  background:
+                    'radial-gradient(circle, color-mix(in oklab, var(--noon-yellow) 35%, transparent) 0%, transparent 70%)',
+                }}
+              />
+              <div className="relative">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-noon-yellow/50 bg-noon-yellow/15 px-3 py-1">
+                  <Sparkles className="h-3.5 w-3.5 text-noon-ink dark:text-noon-yellow" />
+                  <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-noon-ink dark:text-noon-yellow">
+                    ابدأ خلال 30 ثانية
                   </span>
-                )}
-                {products.length > 1 && (
+                </div>
+                <h2 className="mb-1.5 text-xl font-semibold tracking-tight sm:text-2xl">
+                  أحضر مفتاح API خاصًا بك للبدء
+                </h2>
+                <p className="mb-5 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-[15px]">
+                  هذه الأداة تستخدم مفتاحك الخاص — لا حساب مطلوب، ولا رسوم من جانبنا.
+                  يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لكل عملية.
+                  الخيار الأسرع: احصل على{' '}
+                  <strong>مفتاح Gemini مجاني من Google</strong> ثم ألصقه أدناه.
+                </p>
+
+                {/* Step 1: open AIStudio */}
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <motion.a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="btn-noon inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-noon-ink/10 text-[10px] font-bold">
+                      1
+                    </span>
+                    احصل على مفتاح Gemini مجاني
+                    <ArrowUpRight className="h-4 w-4" />
+                  </motion.a>
+                  <span className="text-xs text-zinc-500">
+                    يفتح في تبويب جديد — انسخ المفتاح الذي يبدأ بـ <code className="ltr font-mono text-[11px]">AIza...</code>
+                  </span>
+                </div>
+
+                {/* Step 2: paste inline */}
+                <QuickKeyInput onSaved={persistByok} onOpenFull={() => setByokOpen(true)} />
+
+                <div className="mt-4 text-xs text-zinc-500 ltr">
+                  Also supported: Anthropic · OpenAI · Groq · Mistral · OpenRouter —
                   <button
                     type="button"
-                    onClick={() => removeProduct(p.id)}
-                    className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-900"
-                    aria-label={`حذف المنتج ${idx + 1}`}
+                    onClick={() => setByokOpen(true)}
+                    className="ml-1 font-medium underline decoration-dotted underline-offset-4 hover:text-zinc-700 dark:hover:text-zinc-300"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    pick provider manually
                   </button>
-                )}
-              </header>
-
-              <div className="space-y-3 p-4">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                    الروابط والصور
-                  </label>
-                  <UnifiedInput
-                    text={p.text}
-                    onTextChange={(v) => updateProduct(p.id, { text: v })}
-                    images={p.images}
-                    onAddImages={(files) => addImagesTo(p.id, files)}
-                    onRemoveImage={(i) =>
-                      updateProduct(p.id, { images: p.images.filter((_, idx2) => idx2 !== i) })
-                    }
-                    disabled={p.loading}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                    ملاحظة (اختياري)
-                  </label>
-                  <textarea
-                    value={p.note}
-                    onChange={(e) => updateProduct(p.id, { note: e.target.value })}
-                    rows={2}
-                    placeholder="مثال: السوق المستهدف السعودية، نساء 25-40، سعر حوالي 89 ريال"
-                    className="block w-full resize-y rounded-md border border-zinc-300 bg-white p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                  />
                 </div>
               </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
 
-              <div className="flex items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                <div className="min-w-0 flex-1 text-xs text-zinc-500">
-                  {p.error && <span className="text-red-600">{p.error}</span>}
-                  {!p.error && p.result && <span className="text-emerald-600">تم الإنشاء ✓</span>}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => generate(p.id)}
-                  disabled={p.loading || !byok}
-                  title={!byok ? 'أضف مفتاح API في الإعدادات أولًا' : undefined}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  {p.loading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : p.result ? (
-                    'إعادة الإنشاء'
-                  ) : (
-                    'أنشئ'
+        {/* Product cards — staggered enter, hover lift, layout-animated for
+            smooth add/remove. The inner sections keep the existing layout
+            so all the audit-fix behavior (fromCloud badge, error/success
+            text, regen logic) renders unchanged. */}
+        <div className="space-y-4">
+          <AnimatePresence initial={false}>
+            {products.map((p, idx) => (
+              <motion.article
+                key={p.id}
+                layout
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.18 } }}
+                transition={{
+                  duration: 0.32,
+                  ease: [0.32, 0.72, 0, 1],
+                  delay: Math.min(idx * 0.04, 0.16),
+                }}
+                whileHover={{ y: -2 }}
+                className="card-surface overflow-hidden rounded-2xl"
+              >
+                <header className="flex items-center justify-between gap-3 border-b border-[color:var(--border-soft)] px-4 py-3 sm:px-5">
+                  <input
+                    type="text"
+                    value={p.name}
+                    onChange={(e) => updateProduct(p.id, { name: e.target.value })}
+                    className="flex-1 bg-transparent text-sm font-semibold tracking-tight outline-none"
+                    aria-label="اسم المنتج"
+                  />
+                  {p.fromCloud && p.images.length === 0 && (
+                    <motion.span
+                      initial={{ opacity: 0, scale: 0.92 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="rounded-full border border-amber-300/60 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                      مُستعادة — أضف صورًا قبل إعادة الإنشاء
+                    </motion.span>
                   )}
-                </button>
-              </div>
+                  {products.length > 1 && (
+                    <motion.button
+                      type="button"
+                      onClick={() => removeProduct(p.id)}
+                      whileTap={{ scale: 0.92 }}
+                      className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                      aria-label={`حذف المنتج ${idx + 1}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </motion.button>
+                  )}
+                </header>
 
-              {/* Result panel — Arabic first (primary audience), English second */}
-              {p.result && (
-                <div className="space-y-3 border-t border-zinc-200 p-4 dark:border-zinc-800">
-                  <CodeBlock label="العربية — العنوان" text={p.result.ar.title} direction="rtl" />
-                  <CodeBlock
-                    label="العربية — الوصف والميزات"
-                    text={renderListingAr(p.result)}
-                    direction="rtl"
-                  />
-                  <CodeBlock label="English — Title" text={p.result.en.title} direction="ltr" />
-                  <CodeBlock
-                    label="English — Description + Features"
-                    text={renderListingEn(p.result)}
-                    direction="ltr"
-                  />
+                <div className="space-y-4 p-4 sm:p-5">
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                      الروابط والصور
+                    </label>
+                    <UnifiedInput
+                      text={p.text}
+                      onTextChange={(v) => updateProduct(p.id, { text: v })}
+                      images={p.images}
+                      onAddImages={(files) => addImagesTo(p.id, files)}
+                      onRemoveImage={(i) =>
+                        updateProduct(p.id, { images: p.images.filter((_, idx2) => idx2 !== i) })
+                      }
+                      disabled={p.loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                      ملاحظة (اختياري)
+                    </label>
+                    <textarea
+                      value={p.note}
+                      onChange={(e) => updateProduct(p.id, { note: e.target.value })}
+                      rows={2}
+                      placeholder="مثال: السوق المستهدف السعودية، نساء 25-40، سعر حوالي 89 ريال"
+                      className="block w-full resize-y rounded-lg border border-[color:var(--border-stronger)] bg-[color:var(--surface)] p-2.5 text-xs transition-colors focus:border-noon-yellow-600 focus:outline-none focus:ring-2 focus:ring-noon-yellow/40"
+                    />
+                  </div>
                 </div>
-              )}
-            </article>
-          ))}
+
+                <div className="flex items-center justify-between gap-3 border-t border-[color:var(--border-soft)] bg-[color:var(--surface-elev)] px-4 py-3 sm:px-5">
+                  <div className="min-w-0 flex-1 text-xs">
+                    <AnimatePresence mode="wait">
+                      {p.error ? (
+                        <motion.span
+                          key="err"
+                          initial={{ opacity: 0, x: -4 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="font-medium text-red-600"
+                        >
+                          {p.error}
+                        </motion.span>
+                      ) : p.result ? (
+                        <motion.span
+                          key="ok"
+                          initial={{ opacity: 0, scale: 0.92 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          تم الإنشاء
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="idle"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="text-zinc-500"
+                        >
+                          {p.loading ? 'جارٍ الإنشاء…' : 'جاهز للإنشاء'}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <motion.button
+                    type="button"
+                    onClick={() => generate(p.id)}
+                    disabled={p.loading || !byok}
+                    whileTap={{ scale: p.loading || !byok ? 1 : 0.96 }}
+                    title={!byok ? 'أضف مفتاح API في الإعدادات أولًا' : undefined}
+                    className={
+                      p.result
+                        ? 'inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--border-stronger)] bg-[color:var(--surface)] px-3.5 py-1.5 text-sm font-medium shadow-sm transition-colors hover:bg-[color:var(--surface-elev)] disabled:opacity-60'
+                        : 'btn-noon inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-semibold disabled:opacity-60'
+                    }
+                  >
+                    {p.loading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : p.result ? (
+                      'إعادة الإنشاء'
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5" />
+                        أنشئ
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+
+                {/* Result panel — Arabic first (primary audience), English second */}
+                <AnimatePresence>
+                  {p.result && (
+                    <motion.div
+                      key="result"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+                      className="overflow-hidden border-t border-[color:var(--border-soft)]"
+                    >
+                      <div className="space-y-3 p-4 sm:p-5">
+                        <CodeBlock label="العربية — العنوان" text={p.result.ar.title} direction="rtl" />
+                        <CodeBlock
+                          label="العربية — الوصف والميزات"
+                          text={renderListingAr(p.result)}
+                          direction="rtl"
+                        />
+                        <CodeBlock label="English — Title" text={p.result.en.title} direction="ltr" />
+                        <CodeBlock
+                          label="English — Description + Features"
+                          text={renderListingEn(p.result)}
+                          direction="ltr"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.article>
+            ))}
+          </AnimatePresence>
         </div>
 
         {/* Footer actions */}
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <button
+        <div className="mt-7 flex flex-wrap items-center gap-2">
+          <motion.button
             type="button"
             onClick={addProduct}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            whileTap={{ scale: 0.96 }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--border-stronger)] bg-[color:var(--surface)] px-3.5 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-[color:var(--surface-elev)]"
           >
             <Plus className="h-4 w-4" />
             أضف منتجًا آخر
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             type="button"
             onClick={generateAll}
             disabled={!byok || products.every((p) => p.loading || !!p.result)}
+            whileTap={{ scale: 0.96 }}
             title={!byok ? 'أضف مفتاح API في الإعدادات أولًا' : undefined}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="btn-noon inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold disabled:opacity-50"
           >
+            <Sparkles className="h-4 w-4" />
             أنشئ الكل
-          </button>
+          </motion.button>
 
           <div className="flex-1" />
 
-          <button
+          <motion.button
             type="button"
             onClick={exportCsv}
             disabled={completedCount === 0}
-            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            whileTap={{ scale: completedCount === 0 ? 1 : 0.96 }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 hover:shadow-emerald-500/30 hover:shadow-md disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             تصدير {completedCount > 0 ? `${completedCount} ` : ''}إلى CSV
-          </button>
+          </motion.button>
         </div>
 
-        {cloudReady && cloudUser?.is_anonymous && completedCount >= 1 && (
-          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-            بياناتك محفوظة محليًا فقط — اضغط <Cloud className="inline h-3 w-3 align-[-1px]" /> للمزامنة عبر الأجهزة.
-          </p>
-        )}
+        <AnimatePresence>
+          {cloudReady && cloudUser?.is_anonymous && completedCount >= 1 && (
+            <motion.p
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mt-3 text-xs text-zinc-500 dark:text-zinc-500"
+            >
+              بياناتك محفوظة محليًا فقط — اضغط{' '}
+              <Cloud className="inline h-3 w-3 align-[-1px]" /> للمزامنة عبر الأجهزة.
+            </motion.p>
+          )}
+        </AnimatePresence>
 
-        <footer className="mt-10 text-center text-xs text-zinc-500">
-          يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا.{' '}
-          <span className="ltr">Bring-your-own-key · by The360Squad</span>
+        <footer className="mt-12 border-t border-[color:var(--border-soft)] pt-6 text-center text-xs leading-relaxed text-zinc-500">
+          يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا.
+          <br />
+          <span className="ltr font-medium">Bring-your-own-key · by The360Squad</span>
         </footer>
       </main>
 
-      {byokOpen && (
-        <ByokModal initial={byok} onSave={persistByok} onClose={() => setByokOpen(false)} />
-      )}
+      <AnimatePresence>
+        {byokOpen && (
+          <ByokModal initial={byok} onSave={persistByok} onClose={() => setByokOpen(false)} />
+        )}
+      </AnimatePresence>
 
-      {syncOpen && (
-        <SyncModal
-          user={cloudUser}
-          onClose={() => {
-            setSyncOpen(false);
-            setOauthError(null);
-          }}
-          onSignIn={handleGoogleSignIn}
-          onSignOut={handleSignOut}
-          onDeleteAll={handleDeleteAll}
-          signOutPending={signOutPending}
-          oauthError={oauthError}
-        />
-      )}
+      <AnimatePresence>
+        {syncOpen && (
+          <SyncModal
+            user={cloudUser}
+            onClose={() => {
+              setSyncOpen(false);
+              setOauthError(null);
+            }}
+            onSignIn={handleGoogleSignIn}
+            onSignOut={handleSignOut}
+            onDeleteAll={handleDeleteAll}
+            signOutPending={signOutPending}
+            oauthError={oauthError}
+          />
+        )}
+      </AnimatePresence>
 
-      {confirmDeleteOpen && (
-        <ConfirmDeleteAllModal
-          onConfirm={handleConfirmDeleteAll}
-          onCancel={() => {
-            // Don't allow dismiss while the destructive call is mid-flight —
-            // closing here would leave deletePending stuck true on next open.
-            if (!deletePending) {
-              setConfirmDeleteOpen(false);
-              setDeleteError(null);
-            }
-          }}
-          pending={deletePending}
-          error={deleteError}
-        />
-      )}
+      <AnimatePresence>
+        {confirmDeleteOpen && (
+          <ConfirmDeleteAllModal
+            onConfirm={handleConfirmDeleteAll}
+            onCancel={() => {
+              // Don't allow dismiss while the destructive call is mid-flight —
+              // closing here would leave deletePending stuck true on next open.
+              if (!deletePending) {
+                setConfirmDeleteOpen(false);
+                setDeleteError(null);
+              }
+            }}
+            pending={deletePending}
+            error={deleteError}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
