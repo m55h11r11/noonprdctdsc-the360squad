@@ -44,3 +44,4 @@ next-env.d.ts
 # Playwright audit artifacts (local only)
 .playwright-mcp/
 .env*.local
+.claude/worktrees/
