@@ -82,9 +82,14 @@
   --color-noon-ink: var(--noon-ink);
   --color-surface: var(--surface);
   --color-surface-elev: var(--surface-elev);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* Tailwind v4 @theme inline resolves at parse time and cannot see runtime
+     CSS variables (next/font injects --font-geist-sans etc. via className).
+     We therefore declare font stacks with literal family names here. The
+     full body font-family below still wires the runtime variables in for
+     priority ordering, but Tailwind utilities like `font-sans` are these. */
+  --font-sans: "IBM Plex Sans Arabic", "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-heading: "IBM Plex Sans Arabic", "Geist", ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -130,8 +135,12 @@
    respects prefers-reduced-motion. */
 
 body {
+  /* Arabic-first stack. `--font-arabic` is the next/font/google IBM Plex
+     Sans Arabic instance (variable, weights 300–700) and resolves to a
+     local file URL at runtime. `--font-geist-sans` covers Latin glyphs
+     that IBM Plex Arabic doesn't include (numerals, English UI, brand). */
   font-family:
-    "IBM Plex Sans Arabic",
+    var(--font-arabic),
     "Noto Naskh Arabic",
     "Amiri",
     var(--font-geist-sans),
@@ -183,15 +192,32 @@ body::before {
 }
 
 /* ─── Pulse ring (used to nudge the cloud icon for anonymous users) ───────── */
+/* Animated via a transform on a positioned ::after rather than animating
+   `box-shadow`. box-shadow keyframes invalidate the layout layer on every
+   tick (paint-bound, ~60fps cap on weaker devices); transform/opacity stay
+   on the compositor and ride at the panel's refresh rate. The visual
+   result is identical: a soft yellow ring expanding outward and fading. */
 
 @keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--noon-yellow) 50%, transparent); }
-  70%  { box-shadow: 0 0 0 10px color-mix(in oklab, var(--noon-yellow) 0%, transparent); }
-  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--noon-yellow) 0%, transparent); }
+  0%   { transform: scale(1);   opacity: 0.55; }
+  70%  { transform: scale(1.6); opacity: 0;    }
+  100% { transform: scale(1.6); opacity: 0;    }
 }
 
 .pulse-ring {
+  position: relative;
+}
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--noon-yellow) 50%, transparent);
+  z-index: -1;
+  pointer-events: none;
   animation: pulse-ring 2.4s var(--ease-soft) infinite;
+  /* Promote to its own layer so the transform animation is GPU-accelerated. */
+  will-change: transform, opacity;
 }
 
 /* ─── Shimmer sweep (for primary CTA hover) ───────────────────────────────── */

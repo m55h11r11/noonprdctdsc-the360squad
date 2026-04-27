@@ -40,10 +40,11 @@ export async function DELETE(
     .eq('user_id', user.id);
 
   if (error) {
-    return NextResponse.json(
-      { error: 'db_error', message: error.message },
-      { status: 500 },
-    );
+    // Don't echo Postgres error.message back to the client — it can leak
+    // schema details (column names, constraint identifiers) which is mild
+    // info-disclosure. Server logs keep the full context for debugging.
+    console.error('[listings/:id] delete failed', { id: numeric, error });
+    return NextResponse.json({ error: 'db_error' }, { status: 500 });
   }
   if (!count) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });

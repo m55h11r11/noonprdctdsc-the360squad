@@ -54,8 +54,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { fileToResizedDataUrl } from '@/lib/image';
 import { downloadCsv, productsToCsv, type ProductRow } from '@/lib/csv';
 import { ListingSchema, type Listing } from '@/lib/schema';
@@ -160,7 +158,7 @@ function CopyButton({ getText }: { getText: () => string }) {
           /* clipboard blocked — silent */
         }
       }}
-      className="inline-flex items-center gap-1.5 rounded-md bg-zinc-200 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+      className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground transition hover:bg-muted/80"
       aria-label="نسخ"
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -179,13 +177,13 @@ function CodeBlock({
   direction: 'rtl' | 'ltr';
 }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+    <div className="rounded-lg border border-[color:var(--border-soft)] bg-card">
+      <div className="flex items-center justify-between border-b border-[color:var(--border-soft)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <span>{label}</span>
         <CopyButton getText={() => text} />
       </div>
       <pre
-        className={`whitespace-pre-wrap break-words p-3 text-sm leading-6 text-zinc-800 dark:text-zinc-200 ${direction}`}
+        className={`whitespace-pre-wrap break-words p-3 text-sm leading-6 text-foreground ${direction}`}
       >
         {text}
       </pre>
@@ -260,7 +258,7 @@ function QuickKeyInput({
               if (e.key === 'Enter') submit();
             }}
             placeholder="2. ألصق المفتاح هنا (AIza... / sk-ant-... / sk-... / gsk_...)"
-            className="ltr block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 pl-16 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            className="ltr block w-full rounded-md border border-input bg-card px-3 py-2 pl-16 font-mono text-xs"
             dir="ltr"
             autoComplete="off"
             spellCheck={false}
@@ -268,8 +266,10 @@ function QuickKeyInput({
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
-            className="absolute left-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="absolute left-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
             tabIndex={-1}
+            aria-pressed={show}
+            aria-label={show ? 'إخفاء المفتاح' : 'إظهار المفتاح'}
           >
             {show ? 'إخفاء' : 'إظهار'}
           </button>
@@ -278,7 +278,7 @@ function QuickKeyInput({
           type="button"
           onClick={submit}
           disabled={trimmed.length < 10}
-          className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
           ابدأ
         </button>
@@ -286,17 +286,17 @@ function QuickKeyInput({
       {/* Provider hint */}
       <div className="mt-1.5 text-xs">
         {meta ? (
-          <span className="text-emerald-700 dark:text-emerald-400">
+          <span className="text-emerald-700">
             ✓ تم اكتشاف: <strong>{meta.label}</strong> — اضغط &quot;ابدأ&quot;
           </span>
         ) : trimmed.length > 0 && trimmed.length < 10 ? (
-          <span className="text-zinc-500">المفتاح قصير جدًا…</span>
+          <span className="text-muted-foreground">المفتاح قصير جدًا…</span>
         ) : trimmed.length >= 10 ? (
-          <span className="text-amber-700 dark:text-amber-400">
+          <span className="text-amber-700">
             ⚠ لم نتعرف على المزود — اضغط &quot;ابدأ&quot; لاختياره يدويًا
           </span>
         ) : (
-          <span className="text-zinc-500 ltr">
+          <span className="text-muted-foreground ltr">
             Gemini keys start with <code>AIza</code>. Other providers work too.
           </span>
         )}
@@ -323,15 +323,9 @@ function ByokDialog({
   const [model, setModel] = useState(initial?.model ?? '');
   const [show, setShow] = useState(false);
 
-  // Keep local state in sync with prop changes (e.g., re-opening after save).
-  useEffect(() => {
-    if (open) {
-      setProvider(initial?.provider ?? 'anthropic');
-      setKey(initial?.key ?? '');
-      setModel(initial?.model ?? '');
-      setShow(false);
-    }
-  }, [open, initial]);
+  // (Reset-on-open is handled via the `key` prop at the parent: when the
+  // saved BYOK changes, the parent bumps a counter so this dialog re-mounts
+  // with fresh useState initial values. This avoids set-state-in-effect.)
 
   const meta = PROVIDER_OPTIONS.find((p) => p.id === provider)!;
   const effectiveModel = model.trim() || meta.defaultModel;
@@ -368,7 +362,7 @@ function ByokDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="byok-model">
-              معرّف النموذج <span className="text-xs font-normal text-zinc-500">(اختياري)</span>
+              معرّف النموذج <span className="text-xs font-normal text-muted-foreground">(اختياري)</span>
             </Label>
             <Input
               id="byok-model"
@@ -380,7 +374,7 @@ function ByokDialog({
               autoComplete="off"
               spellCheck={false}
             />
-            <span className="block text-xs text-zinc-500">
+            <span className="block text-xs text-muted-foreground">
               اتركه فارغًا لاستخدام: <code className="ltr inline">{meta.defaultModel}</code>
             </span>
           </div>
@@ -403,12 +397,14 @@ function ByokDialog({
                 variant="ghost"
                 size="xs"
                 onClick={() => setShow((s) => !s)}
-                className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500"
+                className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                aria-pressed={show}
+                aria-label={show ? 'إخفاء المفتاح' : 'إظهار المفتاح'}
               >
                 {show ? 'إخفاء' : 'إظهار'}
               </Button>
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               احصل على مفتاح من{' '}
               <a href={meta.keysUrl} target="_blank" rel="noreferrer" className="underline">
                 {new URL(meta.keysUrl).hostname}
@@ -427,7 +423,7 @@ function ByokDialog({
               onSave(null);
               onOpenChange(false);
             }}
-            className="h-9 text-zinc-600 dark:text-zinc-400"
+            className="h-9 text-muted-foreground"
           >
             مسح المفتاح
           </Button>
@@ -525,10 +521,14 @@ function UnifiedInput({
           {images.map((img, i) => (
             <div
               key={i}
-              className="group relative h-16 w-16 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800"
+              className="group relative h-16 w-16 overflow-hidden rounded-md border border-[color:var(--border-soft)]"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img} alt={`upload ${i + 1}`} className="h-full w-full object-cover" />
+              <img
+                src={img}
+                alt={`صورة مرفوعة ${i + 1}`}
+                className="h-full w-full object-cover"
+              />
               <button
                 type="button"
                 onClick={() => onRemoveImage(i)}
@@ -548,16 +548,17 @@ function UnifiedInput({
         onPaste={handlePaste}
         rows={4}
         placeholder="الصق روابط المنتج من أي موقع (AliExpress / Amazon / Shopify / Salla / أي مصدر)، أو صور المنتج (⌘V / Ctrl+V)، أو اسحب الصور هنا"
-        className="ltr block w-full resize-y bg-transparent p-1 font-mono text-xs outline-none placeholder:text-zinc-400"
+        className="ltr block w-full resize-y bg-transparent p-1 font-mono text-xs outline-none placeholder:text-muted-foreground/70"
         dir="ltr"
         disabled={disabled}
+        aria-label="روابط المنتج وصوره"
       />
 
-      <div className="mt-2 flex items-center justify-between border-t border-dashed border-zinc-200 pt-2 text-xs text-zinc-500 dark:border-zinc-800">
+      <div className="mt-2 flex items-center justify-between border-t border-dashed border-[color:var(--border-soft)] pt-2 text-xs text-muted-foreground">
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-muted"
           disabled={disabled}
         >
           <Upload className="h-3.5 w-3.5" />
@@ -634,7 +635,7 @@ function SyncDialog({
         {isSignedIn ? (
           <>
             <div className="rounded-lg border border-[color:var(--border-soft)] bg-[color:var(--surface-elev)] px-3 py-2 text-sm">
-              <span className="text-zinc-500">مسجّل الدخول:</span>{' '}
+              <span className="text-muted-foreground">مسجّل الدخول:</span>{' '}
               <strong className="ltr inline-block font-mono text-xs">{email}</strong>
             </div>
             <div className="grid gap-2">
@@ -678,7 +679,7 @@ function SyncDialog({
               variant="outline"
               size="lg"
               onClick={onSignIn}
-              className="h-10 gap-2 bg-white text-zinc-900 hover:bg-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+              className="h-10 gap-2 bg-white text-zinc-900 hover:bg-zinc-50"
             >
               <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true">
                 <path
@@ -703,7 +704,7 @@ function SyncDialog({
             {oauthError && (
               <p
                 role="alert"
-                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
               >
                 {oauthError}
               </p>
@@ -713,7 +714,7 @@ function SyncDialog({
               variant="ghost"
               size="sm"
               onClick={onDeleteAll}
-              className="h-7 gap-1.5 text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
+              className="h-7 gap-1.5 text-muted-foreground hover:text-red-600"
             >
               <Trash2 className="size-3.5" />
               حذف بياناتي من السحابة
@@ -728,7 +729,7 @@ function SyncDialog({
 // ─── Confirm-delete-all modal ───────────────────────────────────────────────
 // Replaces window.confirm() — the native dialog uses the browser's locale (so
 // it appears in English buttons / non-RTL on most machines), can't be styled,
-// and feels glaringly out of place in this Arabic-first app. Matches SyncModal
+// and feels glaringly out of place in this Arabic-first app. Matches SyncDialog
 // visually so the destructive moment doesn't feel jarring.
 
 function ConfirmDeleteAllDialog({
@@ -755,7 +756,7 @@ function ConfirmDeleteAllDialog({
     >
       <AlertDialogContent className="max-w-sm">
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-red-600 dark:text-red-400">
+          <AlertDialogTitle className="text-red-600">
             حذف جميع بياناتي؟
           </AlertDialogTitle>
           <AlertDialogDescription>
@@ -765,7 +766,7 @@ function ConfirmDeleteAllDialog({
         {error && (
           <div
             role="alert"
-            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
           >
             {error}
           </div>
@@ -829,6 +830,11 @@ function ProductCard({
   // on touch devices (no pointer events fire there meaningfully). The
   // tilt is intentionally subtle — overdoing it on a form-heavy card
   // makes the inputs feel unstable.
+  // ALL useTransform hooks must run unconditionally at the top of the
+  // component (Rules of Hooks). Earlier this useTransform for the glow
+  // background was inlined inside the JSX style prop, which works by
+  // accident but rebuilds the gradient string on every spring tick and
+  // is fragile under React 19 strict-mode re-renders. Hoisted here.
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const sx = useSpring(mx, { stiffness: 220, damping: 26, mass: 0.4 });
@@ -837,6 +843,19 @@ function ProductCard({
   const rotY = useTransform(sx, [-0.5, 0.5], ['-3deg', '3deg']);
   const glowX = useTransform(sx, [-0.5, 0.5], ['0%', '100%']);
   const glowY = useTransform(sy, [-0.5, 0.5], ['0%', '100%']);
+  const glowBg = useTransform(
+    [glowX, glowY],
+    ([x, y]: string[]) =>
+      `radial-gradient(420px circle at ${x} ${y}, color-mix(in oklab, var(--noon-yellow) 18%, transparent) 0%, transparent 60%)`,
+  );
+
+  // Touch devices: cursor-tilt makes no sense (no pointer hover) and
+  // mouseleave can be missed mid-drop, leaving the card stuck tilted.
+  // Reset on touch end as a safety net.
+  const resetTilt = useCallback(() => {
+    mx.set(0);
+    my.set(0);
+  }, [mx, my]);
 
   return (
     <motion.div
@@ -855,10 +874,9 @@ function ProductCard({
         mx.set((e.clientX - r.left) / r.width - 0.5);
         my.set((e.clientY - r.top) / r.height - 0.5);
       }}
-      onMouseLeave={() => {
-        mx.set(0);
-        my.set(0);
-      }}
+      onMouseLeave={resetTilt}
+      onTouchEnd={resetTilt}
+      onTouchCancel={resetTilt}
       className="group relative"
     >
       {/* Cursor-following glow — sits behind the Card and tracks the pointer.
@@ -866,16 +884,12 @@ function ProductCard({
       <motion.div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        style={{
-          background: useTransform(
-            [glowX, glowY],
-            ([x, y]) =>
-              `radial-gradient(420px circle at ${x} ${y}, color-mix(in oklab, var(--noon-yellow) 18%, transparent) 0%, transparent 60%)`,
-          ),
-        }}
+        style={{ background: glowBg }}
       />
-      <Card className="relative gap-0 overflow-hidden border-[color:var(--border-soft)] bg-card p-0 shadow-sm transition-shadow duration-300 group-hover:shadow-lg group-hover:shadow-black/5 dark:group-hover:shadow-black/40">
-        <CardHeader className="grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-[color:var(--border-soft)] px-4 py-3 sm:px-5">
+      <Card
+        className={`relative gap-0 overflow-hidden ${p.fromCloud && p.images.length === 0 ? 'border-amber-300/60' : 'border-[color:var(--border-soft)]'} bg-card p-0 shadow-sm transition-shadow duration-300 group-hover:shadow-lg group-hover:shadow-black/5`}
+      >
+        <CardHeader className="grid-cols-[1fr_auto] items-center gap-3 border-b border-[color:var(--border-soft)] px-4 py-3 sm:px-5">
           <Input
             type="text"
             value={p.name}
@@ -883,20 +897,6 @@ function ProductCard({
             className="h-8 border-0 bg-transparent px-0 text-sm font-semibold tracking-tight shadow-none focus-visible:ring-0"
             aria-label="اسم المنتج"
           />
-          {p.fromCloud && p.images.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Badge
-                variant="outline"
-                className="border-amber-300/60 bg-amber-50 text-[11px] font-medium text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
-              >
-                مُستعادة — أضف صورًا
-              </Badge>
-            </motion.div>
-          )}
           {canRemove && (
             <motion.div whileTap={{ scale: 0.88 }}>
               <Button
@@ -905,7 +905,7 @@ function ProductCard({
                 size="icon-sm"
                 onClick={() => onRemove(p.id)}
                 aria-label={`حذف المنتج ${idx + 1}`}
-                className="text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
               >
                 <Trash2 className="size-4" />
               </Button>
@@ -915,7 +915,7 @@ function ProductCard({
 
         <CardContent className="space-y-4 px-4 py-4 sm:px-5 sm:py-5">
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               الروابط والصور
             </Label>
             <UnifiedInput
@@ -930,7 +930,7 @@ function ProductCard({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`note-${p.id}`} className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <Label htmlFor={`note-${p.id}`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               ملاحظة (اختياري)
             </Label>
             <Textarea
@@ -963,7 +963,7 @@ function ProductCard({
                   initial={{ opacity: 0, scale: 0.85 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 18 }}
-                  className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400"
+                  className="inline-flex items-center gap-1.5 font-medium text-emerald-600"
                 >
                   <span className="relative inline-flex size-4 items-center justify-center rounded-full bg-emerald-500/15">
                     <Check className="size-3" />
@@ -976,7 +976,7 @@ function ProductCard({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="inline-flex items-center gap-2 text-zinc-500"
+                  className="inline-flex items-center gap-2 text-muted-foreground"
                 >
                   <motion.span
                     animate={{ rotate: 360 }}
@@ -992,7 +992,7 @@ function ProductCard({
                   key="idle"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="text-zinc-500"
+                  className="text-muted-foreground"
                 >
                   جاهز للإنشاء
                 </motion.span>
@@ -1086,7 +1086,7 @@ export default function Home() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // Sign-out runs an async drain of pendingSaves, then signOut, then a fresh
   // signInAnonymously — that can take a noticeable beat on slow networks. We
-  // surface it inside SyncModal so the user sees "جارٍ الحفظ ثم الخروج…" instead
+  // surface it inside SyncDialog so the user sees "جارٍ الحفظ ثم الخروج…" instead
   // of a frozen UI. Falls through to the existing modal close once done.
   const [signOutPending, setSignOutPending] = useState(false);
   // Inline error shown under the Google sign-in button if signInWithOAuth
@@ -1116,9 +1116,19 @@ export default function Home() {
   const destructiveActive = useRef(false);
 
   // Load BYOK from localStorage on mount.
+  //
+  // Why an effect (not a lazy useState initializer): localStorage is
+  // unavailable during SSR. A lazy initializer that reads it on the client
+  // would produce HTML that disagrees with the server's null and trip a
+  // hydration mismatch. The deliberate post-mount setState here causes one
+  // extra client render — that's exactly what we want, and the
+  // `set-state-in-effect` rule is overly broad for one-shot external-state
+  // sync. (See react.dev/learn/you-might-not-need-an-effect — this case is
+  // the legitimate "subscribe to external system" pattern.)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(BYOK_STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setByok(JSON.parse(raw));
     } catch {
       /* corrupt — ignore */
@@ -1157,63 +1167,85 @@ export default function Home() {
       setCloudUser(user);
       setCloudReady(true);
 
-      // If we just landed back from a Google OAuth redirect AND we stashed
-      // an anon user_id before leaving, re-parent the user's anon listings
-      // to the new Google identity. Best-effort: a failure (e.g. expired
-      // JWT racing the bootstrap) leaves the key in place so the next page
-      // load can retry. The server SQL guard rejects unsafe re-parents.
+      // ─── Parallel bootstrap ─────────────────────────────────────────────
+      // Run the (rare) anon-migrate POST in parallel with the always-needed
+      // listings GET. In the common case (no pending migrate), the migrate
+      // promise short-circuits to `null` and we just await the listings.
+      // In the post-sign-in case, we kick off both fetches in parallel and
+      // refetch listings once at the end IF migrate moved any rows — the
+      // first fetch was racing the migrate and may have missed them.
+
+      let pendingAnonId: string | null = null;
       try {
-        const pendingAnonId = localStorage.getItem(PENDING_ANON_MIGRATE_KEY);
-        if (pendingAnonId && user && !user.is_anonymous && pendingAnonId !== user.id) {
-          let migrateRes: Response | null = null;
-          try {
-            migrateRes = await fetch('/api/listings/migrate', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ anonUserId: pendingAnonId }),
-            });
-          } catch {
-            /* network error — leave the key for next bootstrap to retry */
-          }
-          if (migrateRes && migrateRes.ok) {
-            // Clear the key only on confirmed success — a 401 from a stale
-            // JWT or a 503 from cold cloud should NOT eat our retry option.
-            try {
-              localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
-            } catch {
-              /* storage disabled */
-            }
-            try {
-              const payload = (await migrateRes.json()) as { moved?: number };
-              const moved = typeof payload.moved === 'number' ? payload.moved : 0;
-              if (moved > 0) {
-                toast.success(`تم نقل ${moved} من قوائمك إلى حسابك.`);
-              } else {
-                toast.success('تم ربط حسابك بنجاح.');
-              }
-            } catch {
-              toast.success('تم ربط حسابك بنجاح.');
-            }
-          }
-        } else if (pendingAnonId) {
-          // Stale key but no usable session for it — clear so it doesn't
-          // linger across future sign-ins.
-          try {
-            localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
-          } catch {
-            /* storage disabled */
-          }
-        }
+        pendingAnonId = localStorage.getItem(PENDING_ANON_MIGRATE_KEY);
       } catch {
-        /* storage disabled — nothing to do */
+        /* storage disabled */
+      }
+      const shouldMigrate =
+        !!pendingAnonId &&
+        !!user &&
+        !user.is_anonymous &&
+        pendingAnonId !== user.id;
+
+      const migratePromise: Promise<Response | null> = shouldMigrate
+        ? fetch('/api/listings/migrate', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ anonUserId: pendingAnonId }),
+          }).catch(() => null)
+        : Promise.resolve(null);
+
+      const fetchListings = (): Promise<Response | null> =>
+        fetch('/api/listings').catch(() => null);
+
+      const [migrateRes, firstListingsRes] = await Promise.all([
+        migratePromise,
+        fetchListings(),
+      ]);
+
+      // Process migrate result first — it may demand a refetch.
+      let movedRowsFromMigrate = 0;
+      if (shouldMigrate && migrateRes && migrateRes.ok) {
+        try {
+          localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
+        } catch {
+          /* storage disabled */
+        }
+        try {
+          const payload = (await migrateRes.clone().json()) as { moved?: number };
+          movedRowsFromMigrate = typeof payload.moved === 'number' ? payload.moved : 0;
+          if (movedRowsFromMigrate > 0) {
+            toast.success(`تم نقل ${movedRowsFromMigrate} من قوائمك إلى حسابك.`);
+          } else {
+            toast.success('تم ربط حسابك بنجاح.');
+          }
+        } catch {
+          toast.success('تم ربط حسابك بنجاح.');
+        }
+      } else if (shouldMigrate && migrateRes) {
+        // Server refused (401, 503, 4xx). Key stays in place for retry on
+        // next bootstrap. Toast is gentle: this is recoverable.
+        toast.error(
+          'لم نتمكن من نقل قوائمك السابقة الآن. سنحاول مرة أخرى عند فتح الصفحة لاحقًا.',
+        );
+      } else if (pendingAnonId && !shouldMigrate) {
+        // Stale key but no usable session for it — clear so it doesn't
+        // linger across future sign-ins.
+        try {
+          localStorage.removeItem(PENDING_ANON_MIGRATE_KEY);
+        } catch {
+          /* storage disabled */
+        }
       }
 
-      // Pull recent listings to decide whether to show the ☁️ button and
-      // whether to restore past work into the UI.
+      // If migrate moved rows, the first listings fetch was racing it and
+      // likely missed them. Refetch under the new ownership.
+      const listingsRes =
+        movedRowsFromMigrate > 0 ? await fetchListings() : firstListingsRes;
+
       try {
-        const res = await fetch('/api/listings');
-        if (!res.ok) return;
-        const payload = await res.json();
+        if (!listingsRes || !listingsRes.ok) return;
+        const payload = await listingsRes.json();
         // result is typed as `unknown` deliberately — the API filters bad
         // rows but we don't trust the wire blindly (cached responses, future
         // schema drift, etc.). Validate at use site via flatMap so any row
@@ -1327,7 +1359,13 @@ export default function Home() {
     inFlight.current.add(id);
     // Clear any prior result so a failed retry doesn't leave the old success
     // panel sitting next to a fresh red error.
-    updateProduct(id, { loading: true, error: null, result: null });
+    //
+    // Also clear `fromCloud`: once the user kicks off a regen, the resulting
+    // listing is a fresh local generation — it is no longer the cloud row
+    // they restored. Without this clear, the post-success save block below
+    // skips the POST (because fromCloud is still true), and a regenerated
+    // listing is silently lost on next reload.
+    updateProduct(id, { loading: true, error: null, result: null, fromCloud: false });
 
     try {
       const headers: Record<string, string> = {
@@ -1407,7 +1445,7 @@ export default function Home() {
     }
   };
 
-  // Cloud sync handlers — passed to SyncModal.
+  // Cloud sync handlers — passed to SyncDialog.
   const handleGoogleSignIn = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
@@ -1485,6 +1523,10 @@ export default function Home() {
       setSyncOpen(false);
       setSignOutPending(false);
       destructiveActive.current = false;
+      // User-visible confirmation that the destructive action landed —
+      // without it the modal just closes and the user can't tell whether
+      // the click was processed.
+      toast.success('تم تسجيل الخروج. قوائمك السحابية لا تزال محفوظة.');
     }
   }, [drainPendingSaves]);
 
@@ -1557,7 +1599,36 @@ export default function Home() {
     // Snapshot the eligible IDs once so we don't react to setState changes
     // mid-iteration. allSettled keeps one failure from aborting the rest.
     const ids = products.filter((p) => !p.loading && !p.result).map((p) => p.id);
+    if (ids.length === 0) return;
     await Promise.allSettled(ids.map((id) => generate(id)));
+
+    // Aggregate outcome across the batch. Per-card success is already shown
+    // inline (green check + filled card body). Per-card failure is already
+    // shown inline too. The toast adds one summary line so the user gets a
+    // single legible "what happened" without scanning every card.
+    //
+    // Reading from `products` here is stale (closure captured before the
+    // generate calls mutated it), so we use the ref-like ids snapshot and
+    // re-derive against the latest products via setProducts(prev => ...).
+    setProducts((latest) => {
+      const finished = latest.filter((p) => ids.includes(p.id));
+      const failed = finished.filter((p) => !!p.error);
+      const succeeded = finished.filter((p) => !!p.result);
+      if (failed.length > 0 && succeeded.length > 0) {
+        toast.error(
+          `فشل ${failed.length} من ${ids.length}. ${succeeded.length} نجحت — راجع البطاقات الحمراء أعلاه.`,
+        );
+      } else if (failed.length > 0) {
+        toast.error(
+          ids.length === 1
+            ? 'تعذر الإنشاء — راجع رسالة الخطأ على البطاقة.'
+            : `فشل إنشاء جميع المنتجات (${failed.length}). راجع رسائل الخطأ.`,
+        );
+      } else if (succeeded.length === ids.length && ids.length > 1) {
+        toast.success(`تم إنشاء ${succeeded.length} منتجات بنجاح.`);
+      }
+      return latest;
+    });
   };
 
   const completedCount = products.filter((p) => !!p.result).length;
@@ -1615,7 +1686,7 @@ export default function Home() {
             </motion.div>
             <div className="leading-tight">
               <h1 className="text-base font-semibold tracking-tight">مولد أوصاف منتجات نون</h1>
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500 ltr">by The360Squad</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground ltr">by The360Squad</p>
             </div>
           </motion.div>
           <div className="flex items-center gap-2">
@@ -1628,10 +1699,10 @@ export default function Home() {
               >
                 <Badge
                   variant="outline"
-                  className="gap-1.5 border-emerald-300/60 bg-emerald-50/80 px-3 py-1 text-xs font-medium text-emerald-800 backdrop-blur dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  className="gap-1.5 border-[color:var(--noon-yellow-600)]/55 bg-[color:var(--noon-yellow)]/15 px-3 py-1 text-xs font-medium text-noon-ink backdrop-blur"
                 >
-                  <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-500">
-                    <span className="absolute inset-0 rounded-full bg-emerald-500 opacity-75 animate-ping" />
+                  <span className="relative h-1.5 w-1.5 rounded-full bg-[color:var(--noon-yellow-600)]">
+                    <span className="absolute inset-0 rounded-full bg-[color:var(--noon-yellow-600)] opacity-75 animate-ping" />
                   </span>
                   {byokLabel}
                 </Badge>
@@ -1658,7 +1729,7 @@ export default function Home() {
                       }
                     >
                       {cloudUser && !cloudUser.is_anonymous ? (
-                        <Cloud className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <Cloud className="size-3.5 text-[color:var(--noon-yellow-600)]" />
                       ) : (
                         <CloudOff className="size-3.5" />
                       )}
@@ -1698,14 +1769,14 @@ export default function Home() {
         >
           <div className="mb-2 flex items-center gap-2">
             <span className="inline-flex h-1.5 w-1.5 rounded-full bg-noon-yellow shadow-[0_0_0_3px_rgba(254,238,0,0.25)]" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 ltr">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ltr">
               Bilingual · Noon-ready
             </span>
           </div>
           <h2 className="mb-2 text-xl font-semibold tracking-tight sm:text-[22px]">
             أنشئ قوائم جاهزة لنون — بضغطة واحدة
           </h2>
-          <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-[15px]">
+          <p className="text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
             الصق روابط المنتج من أي متجر (AliExpress، Amazon، Shopify، Salla، أو أي مصدر) أو ألصق صور المنتج.
             ستحصل على عنوان ووصف و5 ميزات متوافقة مع نون — بالعربية والإنجليزية. أضف منتجات أخرى ثم صدّر الكل كملف CSV واحد.
           </p>
@@ -1739,15 +1810,15 @@ export default function Home() {
               />
               <div className="relative">
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-noon-yellow/50 bg-noon-yellow/15 px-3 py-1">
-                  <Sparkles className="h-3.5 w-3.5 text-noon-ink dark:text-noon-yellow" />
-                  <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-noon-ink dark:text-noon-yellow">
+                  <Sparkles className="h-3.5 w-3.5 text-noon-ink" />
+                  <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-noon-ink">
                     ابدأ خلال 30 ثانية
                   </span>
                 </div>
                 <h2 className="mb-1.5 text-xl font-semibold tracking-tight sm:text-2xl">
                   أحضر مفتاح API خاصًا بك للبدء
                 </h2>
-                <p className="mb-5 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-[15px]">
+                <p className="mb-5 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
                   هذه الأداة تستخدم مفتاحك الخاص — لا حساب مطلوب، ولا رسوم من جانبنا.
                   يُحفظ المفتاح في متصفحك فقط، ويُمرَّر إلى المزود مباشرة لكل عملية.
                   الخيار الأسرع: احصل على{' '}
@@ -1761,7 +1832,7 @@ export default function Home() {
                       asChild
                       variant="noon"
                       size="lg"
-                      className="h-10 gap-2 rounded-xl px-4 text-sm font-semibold"
+                      className="h-10 gap-2 px-4 text-sm font-semibold"
                     >
                       <a
                         href="https://aistudio.google.com/app/apikey"
@@ -1776,7 +1847,7 @@ export default function Home() {
                       </a>
                     </Button>
                   </motion.div>
-                  <span className="text-xs text-zinc-500">
+                  <span className="text-xs text-muted-foreground">
                     يفتح في تبويب جديد — انسخ المفتاح الذي يبدأ بـ <code className="ltr font-mono text-[11px]">AIza...</code>
                   </span>
                 </div>
@@ -1784,7 +1855,7 @@ export default function Home() {
                 {/* Step 2: paste inline */}
                 <QuickKeyInput onSaved={persistByok} onOpenFull={() => setByokOpen(true)} />
 
-                <div className="mt-4 text-xs text-zinc-500 ltr">
+                <div className="mt-4 text-xs text-muted-foreground ltr">
                   Also supported: Anthropic · OpenAI · Groq · Mistral · OpenRouter —
                   <Button
                     type="button"
@@ -1801,9 +1872,36 @@ export default function Home() {
           )}
         </AnimatePresence>
 
+        {/* "X listings restored" banner — a single non-intrusive notice that
+            replaces the per-card "مُستعادة" badges. Per-card cue is a soft
+            amber border on the Card itself (in ProductCard). The banner only
+            renders while at least one card still has no images attached;
+            once the user adds images (or regenerates), it disappears. */}
+        {(() => {
+          const restoredCount = products.filter(
+            (p) => p.fromCloud && p.images.length === 0,
+          ).length;
+          if (restoredCount === 0) return null;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-3 text-sm text-amber-900"
+            >
+              <Cloud className="mt-0.5 size-4 shrink-0 text-amber-700" />
+              <p className="leading-relaxed">
+                تم استرجاع <strong>{restoredCount}</strong>{' '}
+                {restoredCount === 1 ? 'قائمة' : 'قوائم'} من حسابك. الصور لا
+                تُحفظ في السحابة — أضف صور المنتج لإعادة الإنشاء عند الحاجة.
+              </p>
+            </motion.div>
+          );
+        })()}
+
         {/* Product cards — staggered enter, hover lift, layout-animated for
             smooth add/remove. The inner sections keep the existing layout
-            so all the audit-fix behavior (fromCloud badge, error/success
+            so all the audit-fix behavior (fromCloud border, error/success
             text, regen logic) renders unchanged. */}
         <div className="space-y-4">
           <AnimatePresence initial={false}>
@@ -1876,7 +1974,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="mt-3 text-xs text-zinc-500 dark:text-zinc-500"
+              className="mt-3 text-xs text-muted-foreground"
             >
               بياناتك محفوظة محليًا فقط — اضغط{' '}
               <Cloud className="inline h-3 w-3 align-[-1px]" /> للمزامنة عبر الأجهزة.
@@ -1884,7 +1982,7 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        <footer className="mt-12 border-t border-[color:var(--border-soft)] pt-6 text-center text-xs leading-relaxed text-zinc-500">
+        <footer className="mt-12 border-t border-[color:var(--border-soft)] pt-6 text-center text-xs leading-relaxed text-muted-foreground">
           يلتزم بقواعد نون: لا رموز تعبيرية في الأوصاف أو النقاط، عناوين 20–200 حرف، 5 ميزات بحد أقصى 250 حرفًا.
           <br />
           <span className="ltr font-medium">Bring-your-own-key · by The360Squad</span>
